@@ -1,0 +1,14 @@
+{
+  "name": "canarinho",
+  "version": "1.0.0",
+  "description": "nlp for canarinho app",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "doriclaudino",
+  "license": "ISC",
+  "dependencies": {
+    "natural": "^0.6.3"
+  }
+}
