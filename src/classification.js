@@ -21,3 +21,6 @@ classifier.train();
  */
 // must show sell because we teach short means sell
 console.log(classifier.classify('i am short silver'));
+
+//here stats behind
+console.log(classifier.getClassifications('i am long copper'));
