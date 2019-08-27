@@ -250,7 +250,7 @@ match = regex.exec(timestap)
 messageTimestamp = new Date(match[6],match[4],match[5],match[3]==='PM'?parseInt(match[1])+12:match[1],match[2],0,0);
 
 var linhas = []
-var chat_history = getElement("chat_history");
+var chat_history = getElement("chat_history").;
 Array.from(chat_history.lastChild.lastChild.children).forEach((linha, index) => {
     message = getElement('chat_line_sender_message', linha).innerText;
     linha.childNodes[1].childNodes[0].children == 2 //is an append
@@ -279,3 +279,8 @@ Array.from(chat_history.lastChild.lastChild.children).forEach((linha, index) => 
     // }
 });
 
+
+//filter initial bubbles to get the userName, phone
+//then the following lines will be appended
+Array.from(getElement("chat_history").lastChild.lastChild.children)
+.filter(e=>e.querySelector('span.tail-container.highlight') && e.querySelector('div.message-in'))
