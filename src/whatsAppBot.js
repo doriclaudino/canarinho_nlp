@@ -6,12 +6,22 @@ var ignoreLastMsg = {};
 var elementConfig = {
     "chats": [0, 0, 5, 2, 0, 3, 0, 0, 0],
     "chat_icons": [0, 0, 1, 1, 1, 0],
-    "chat_title": [0, 0, 1, 0, 0, 0, 0],
+    "chat_title": [0, 0, 1, 0, 0, 0],
     "chat_lastmsg": [0, 0, 1, 1, 0, 0],
+    "chat_lasttime": [0, 0, 1, 0, 1],
     "chat_active": [0, 0],
     "selected_title": [0, 0, 5, 3, 0, 1, 1, 0, 0, 0],
-    "group_users": [0, 0, 5, 3, 0, 1, 1, 1, 0]
+    "group_users": [0, 0, 5, 3, 0, 1, 1, 1, 0],
+    "chat_history": [0, 0, 5, 3, 0, 4, 0], //.lastChild.lastChild.children,
+    //getElement('chat_history').lastChild.scrollTo(0,-100);
+    "chat_line_sender_number": [1,2,0,0],
+    "chat_line_sender_name": [1,2,0,1],
+    "chat_line_sender_message": [1,2,1,0,0,0], //innerText
+    "chat_line_sender_raw_timestamp": [1,2,1], //getAttribute('data-pre-plain-text');
 };
+var unreadThreshold = 5; //5 chats unread, loop start again
+var minLoopInterval = rand(120, 60) * 1000; //between 1-2min
+var groupLastReadTimestamp = {}
 
 //
 // FUNCTIONS
@@ -51,6 +61,24 @@ function getLastMsg() {
         return messages[pos].querySelector('.selectable-text').innerText.trim();
     } else {
         return false;
+    }
+}
+
+function getAllChats(){
+    var chats = getElement("chats");
+    if (chats) {
+        chats = chats.childNodes;
+        for (var i in chats) {
+            if (!(chats[i] instanceof Element)) {
+                continue;
+            }
+            const chat = chats[i]
+            const title = getElement("chat_title", chat).innerText;
+            const message = getElement("chat_lastmsg", chat).innerText;
+            const timestamp = getElement("chat_lasttime", chat).innerText;
+            const htmlElement = chat
+            console.log({title, message, timestamp, htmlElement})
+        }
     }
 }
 
@@ -161,17 +189,93 @@ const sendMessage = (chat, message, cb) => {
 }
 
 
-start = () =>{
+start = () => {
     //fix loop correctly
     var unread = getUnreadChats();
-    Object.keys(unread).forEach(index =>{
-        var title = getElement("selected_title").title; 
+    Object.keys(unread).forEach(index => {
+        var chat = unread[index]
+        var title = getElement("selected_title").title;
         var groupUsers = getElement("group_users").title;
 
         //check if got 10+ string separated by comma (around 100+ chars)
         var groupHas10UsersOrMore = /(?:.{10,25}\,){10,}/gmi.test(groupUsers);
         console.log(`group: ${title} - isValidGroup: ${groupHas10UsersOrMore}`);
-    })    
+    })
 }
 
 start();
+
+function reachTop() {
+    var chat_history = getElement("chat_history");
+    var foundAdded = true;
+    var foundSecured = false;
+    Array.from(chat_history.lastChild.lastChild.children).forEach(e => {
+        element = e.querySelector('span[dir="ltr"]:last-child[class=""]');
+        if (element) {
+            if (!foundSecured && element.innerText.indexOf("you send to this group are secured with end-to-end encryption") > -1)
+                foundSecured = true;
+            if (!foundAdded && element.innerText.indexOf("added you") > -1)
+                foundAdded = true;
+        }
+    });
+    return foundAdded && foundSecured
+}
+
+async function readAsyncAllMessages() {
+    if (reachTop())
+        return new Promise.resolve(true);
+    
+    let promise = new Promise((resolve, reject) => {
+        var interval = setInterval(() => {
+            if (reachTop()) {
+                clearInterval(interval);
+                resolve(true);
+            }
+            scrollChatTop(); 
+    }, rand(2000, 800));
+            }) ;  
+  return promise;
+}
+
+function scrollChatTop() {
+    getElement('chat_history').lastChild.scrollTo(0, -100);
+}
+
+senderNumber = linha.childNodes[1].childNodes[2].childNodes[0].childNodes[0]
+senderName = linha.childNodes[1].childNodes[2].childNodes[0].childNodes[1]
+text = linha.childNodes[1].childNodes[2].childNodes[1].childNodes[0].childNodes[0].childNodes[0].innerText
+timestap = linha.childNodes[1].childNodes[2].childNodes[1].getAttribute('data-pre-plain-text');
+const regex = /\[(\d{1,2})\:(\d{1,2})\s(.{2})..(\d{1,2})\/(\d{1,2})\/(\d{1,4})\]/gmi;
+match = regex.exec(timestap)
+messageTimestamp = new Date(match[6],match[4],match[5],match[3]==='PM'?parseInt(match[1])+12:match[1],match[2],0,0);
+
+var linhas = []
+var chat_history = getElement("chat_history");
+Array.from(chat_history.lastChild.lastChild.children).forEach((linha, index) => {
+    message = getElement('chat_line_sender_message', linha).innerText;
+    linha.childNodes[1].childNodes[0].children == 2 //is an append
+    linha.childNodes[1].childNodes[0].children == 3 //theres a new topic with name
+    linha.childNodes[1].childNodes[0].children == 4 //theres a new topic replay audio
+    console.log(linha)
+    console.log(message)
+
+    // senderNumber = getElement('chat_line_sender_number', linha).innerText;
+    // senderName = getElement('chat_line_sender_name', linha).innerText;
+    // message = getElement('chat_line_sender_message', linha).innerText;
+    // rawTimestap = getElement('chat_line_sender_raw_timestamp', linha).getAttribute('data-pre-plain-text');
+    // const regex = /\[(\d{1,2})\:(\d{1,2})\s(.{2})..(\d{1,2})\/(\d{1,2})\/(\d{1,4})\]/gmi;
+    // match = regex.exec(rawTimestap)
+    // timestamp = undefined
+    // if(match && match.length>5)
+    // timestamp = new Date(match[6],match[4],match[5],match[3]==='PM'?parseInt(match[1])+12:match[1],match[2],0,0);
+    // htmlElement = linha
+    
+    // console.log(message)
+    // if(message!==undefined){
+    //     console.log(message)
+    //     linhas[index-1].message += `\n ${message}`
+    // }else{
+    //     linhas.push({senderNumber, senderName, timestamp, message, htmlElement })
+    // }
+});
+
