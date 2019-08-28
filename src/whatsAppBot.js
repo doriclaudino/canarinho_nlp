@@ -17,6 +17,8 @@ var elementConfig = {
 var unreadThreshold = 5; //5 chats unread, loop start again
 var minLoopInterval = rand(120, 60) * 1000; //between 1-2min
 var groupLastReadTimestamp = {}
+const scrollSpeedConfig = { 'robot': { min: 50, max: 100, length: 3000 }, 'fast': { min: 200, max: 400, length: 500 }, 'normal': { min: 1000, max: 2000, length: 300 }, 'slow': { min: 2000, max: 3000, length: 100 } }
+var scrollSpeed = 'fast';
 
 //
 // FUNCTIONS
@@ -188,7 +190,7 @@ const sendMessage = (chat, message, cb) => {
  * chatContainer must be loaded
  * must have 10 users on group
  */
-function isAnValidChatGroup(){
+function isAnValidChatGroup() {
     var groupUsers = getElement("group_users").title;
     var groupHas10UsersOrMore = /(?:.{10,25}\,){10,}/gmi.test(groupUsers);
     return groupHas10UsersOrMore
@@ -214,10 +216,37 @@ function reachTop() {
     return foundAdded && foundSecured
 }
 
+
+/**
+ * return an random min and max delay
+ */
+function getScrollDelay() {
+    let config = getScrollConfig();
+    return rand(config.min, config.max)
+}
+
+/**
+ * get config and set scroll to negative
+ */
+function getScrollLength() {
+    let config = getScrollConfig();
+    return -Math.abs(config.length);
+}
+
+/**
+ * get the user config otherwise use the normal speed
+ */
+function getScrollConfig() {
+    return scrollSpeedConfig[scrollSpeed] || scrollSpeedConfig['normal']
+}
+
+
 /**
  * tells us when reach the top of chatHistory
  */
 async function asyncLoadAllChatHistory() {
+    speed = scrollSpeedConfig[scrollSpeed] || scrollSpeedConfig['normal']
+
     if (reachTop())
         return new Promise.resolve(true);
 
@@ -228,16 +257,16 @@ async function asyncLoadAllChatHistory() {
                 resolve(true);
             }
             scrollChatTop();
-        }, rand(2000, 800));
+        }, getScrollDelay());
     });
     return promise;
 }
 
 /**
- * scroll 100 pixel to top
+ * scroll Y pixels to top
  */
 function scrollChatTop() {
-    getElement('chat_history').lastChild.scrollTo(0, -100);
+    getElement('chat_history').lastChild.scrollTo(0, getScrollLength());
 }
 
 /**
