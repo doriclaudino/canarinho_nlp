@@ -12,12 +12,7 @@ var elementConfig = {
     "chat_active": [0, 0],
     "selected_title": [0, 0, 5, 3, 0, 1, 1, 0, 0, 0],
     "group_users": [0, 0, 5, 3, 0, 1, 1, 1, 0],
-    "chat_history": [0, 0, 5, 3, 0, 4, 0], //.lastChild.lastChild.children,
-    //getElement('chat_history').lastChild.scrollTo(0,-100);
-    "chat_line_sender_number": [1,2,0,0],
-    "chat_line_sender_name": [1,2,0,1],
-    "chat_line_sender_message": [1,2,1,0,0,0], //innerText
-    "chat_line_sender_raw_timestamp": [1,2,1], //getAttribute('data-pre-plain-text');
+    "chat_history": [0, 0, 5, 3, 0, 4, 0],
 };
 var unreadThreshold = 5; //5 chats unread, loop start again
 var minLoopInterval = rand(120, 60) * 1000; //between 1-2min
@@ -64,7 +59,7 @@ function getLastMsg() {
     }
 }
 
-function getAllChats(){
+function getAllChats() {
     var chats = getElement("chats");
     if (chats) {
         chats = chats.childNodes;
@@ -77,7 +72,7 @@ function getAllChats(){
             const message = getElement("chat_lastmsg", chat).innerText;
             const timestamp = getElement("chat_lasttime", chat).innerText;
             const htmlElement = chat
-            console.log({title, message, timestamp, htmlElement})
+            console.log({ title, message, timestamp, htmlElement })
         }
     }
 }
@@ -189,22 +184,20 @@ const sendMessage = (chat, message, cb) => {
 }
 
 
-start = () => {
-    //fix loop correctly
-    var unread = getUnreadChats();
-    Object.keys(unread).forEach(index => {
-        var chat = unread[index]
-        var title = getElement("selected_title").title;
-        var groupUsers = getElement("group_users").title;
-
-        //check if got 10+ string separated by comma (around 100+ chars)
-        var groupHas10UsersOrMore = /(?:.{10,25}\,){10,}/gmi.test(groupUsers);
-        console.log(`group: ${title} - isValidGroup: ${groupHas10UsersOrMore}`);
-    })
+/**
+ * chatContainer must be loaded
+ * must have 10 users on group
+ */
+function isAnValidChatGroup(){
+    var groupUsers = getElement("group_users").title;
+    var groupHas10UsersOrMore = /(?:.{10,25}\,){10,}/gmi.test(groupUsers);
+    return groupHas10UsersOrMore
 }
 
-start();
 
+/**
+ * tells us when reach the top
+ */
 function reachTop() {
     var chat_history = getElement("chat_history");
     var foundAdded = true;
@@ -221,66 +214,114 @@ function reachTop() {
     return foundAdded && foundSecured
 }
 
-async function readAsyncAllMessages() {
+/**
+ * tells us when reach the top of chatHistory
+ */
+async function asyncLoadAllChatHistory() {
     if (reachTop())
         return new Promise.resolve(true);
-    
+
     let promise = new Promise((resolve, reject) => {
         var interval = setInterval(() => {
             if (reachTop()) {
                 clearInterval(interval);
                 resolve(true);
             }
-            scrollChatTop(); 
-    }, rand(2000, 800));
-            }) ;  
-  return promise;
+            scrollChatTop();
+        }, rand(2000, 800));
+    });
+    return promise;
 }
 
+/**
+ * scroll 100 pixel to top
+ */
 function scrollChatTop() {
     getElement('chat_history').lastChild.scrollTo(0, -100);
 }
 
-senderNumber = linha.childNodes[1].childNodes[2].childNodes[0].childNodes[0]
-senderName = linha.childNodes[1].childNodes[2].childNodes[0].childNodes[1]
-text = linha.childNodes[1].childNodes[2].childNodes[1].childNodes[0].childNodes[0].childNodes[0].innerText
-timestap = linha.childNodes[1].childNodes[2].childNodes[1].getAttribute('data-pre-plain-text');
-const regex = /\[(\d{1,2})\:(\d{1,2})\s(.{2})..(\d{1,2})\/(\d{1,2})\/(\d{1,4})\]/gmi;
-match = regex.exec(timestap)
-messageTimestamp = new Date(match[6],match[4],match[5],match[3]==='PM'?parseInt(match[1])+12:match[1],match[2],0,0);
-
-var linhas = []
-var chat_history = getElement("chat_history").;
-Array.from(chat_history.lastChild.lastChild.children).forEach((linha, index) => {
-    message = getElement('chat_line_sender_message', linha).innerText;
-    linha.childNodes[1].childNodes[0].children == 2 //is an append
-    linha.childNodes[1].childNodes[0].children == 3 //theres a new topic with name
-    linha.childNodes[1].childNodes[0].children == 4 //theres a new topic replay audio
-    console.log(linha)
-    console.log(message)
-
-    // senderNumber = getElement('chat_line_sender_number', linha).innerText;
-    // senderName = getElement('chat_line_sender_name', linha).innerText;
-    // message = getElement('chat_line_sender_message', linha).innerText;
-    // rawTimestap = getElement('chat_line_sender_raw_timestamp', linha).getAttribute('data-pre-plain-text');
-    // const regex = /\[(\d{1,2})\:(\d{1,2})\s(.{2})..(\d{1,2})\/(\d{1,2})\/(\d{1,4})\]/gmi;
-    // match = regex.exec(rawTimestap)
-    // timestamp = undefined
-    // if(match && match.length>5)
-    // timestamp = new Date(match[6],match[4],match[5],match[3]==='PM'?parseInt(match[1])+12:match[1],match[2],0,0);
-    // htmlElement = linha
-    
-    // console.log(message)
-    // if(message!==undefined){
-    //     console.log(message)
-    //     linhas[index-1].message += `\n ${message}`
-    // }else{
-    //     linhas.push({senderNumber, senderName, timestamp, message, htmlElement })
-    // }
-});
+/**
+ * all income messages on chathistory
+ */
+function getAllMessagesIn() {
+    return Array.from(getElement("chat_history").lastChild.lastChild.children)
+        .filter(e => e.querySelector('div.message-in'))
+}
 
 
-//filter initial bubbles to get the userName, phone
-//then the following lines will be appended
-Array.from(getElement("chat_history").lastChild.lastChild.children)
-.filter(e=>e.querySelector('span.tail-container.highlight') && e.querySelector('div.message-in'))
+/**
+ * 
+ * @param {htmlElement} htmlElement 
+ * extract innerText if element exist
+ */
+function getInnerText(htmlElement) {
+    if (!htmlElement)
+        return undefined
+    return htmlElement.innerText
+}
+
+/**
+ * 
+ * @param {htmlElement} htmlElement 
+ * pass the line element on chatHistory to extract the timestamp
+ * if there's no timestamp means is not an text
+ */
+function getTimestamp(htmlElement) {
+    if (!htmlElement)
+        return undefined
+
+    let rawTimestap = htmlElement.querySelector('div.copyable-text')
+    if (!rawTimestap)
+        return undefined
+    rawTimestap = rawTimestap.getAttribute('data-pre-plain-text');
+
+    if (!rawTimestap)
+        return undefined
+    const regex = /\[(\d{1,2})\:(\d{1,2})\s(.{2})..(\d{1,2})\/(\d{1,2})\/(\d{1,4})\]/gmi;
+    const match = regex.exec(rawTimestap)
+    const timestamp = new Date(match[6], match[4], match[5], match[3] === 'PM' ? parseInt(match[1]) + 12 : match[1], match[2], 0, 0);
+    return timestamp.getTime()
+}
+
+
+/**
+ * read all elements on chat history
+ * try to merge multi-line screens
+ */
+function readCurrentChat() {
+    lines = [];
+    getAllMessagesIn().forEach((linha, index) => {
+        line = linha
+        header = undefined;
+        messages = [];
+        author = undefined;
+        contact = undefined;
+        text = undefined;
+        timestamp = undefined;
+
+        header = linha.querySelector('span.tail-container.highlight')
+        if (header) {
+            author = getInnerText(linha.querySelector('span._1F9Ap[dir="auto"]')) || getInnerText(linha.querySelector('span._1uQFN[dir="auto"]'))
+            contact = getInnerText(linha.querySelector('span.ZObjg[role="button"]')) //name from others people contact       
+        }
+
+        timestamp = getTimestamp(linha)
+        text = getInnerText(linha.querySelector('span.selectable-text.invisible-space.copyable-text'))
+
+        if (!timestamp || !text)
+            return;
+
+        //create new
+        if (header) {
+            messages = [];
+            messages.push({ text, timestamp })
+            lines.push({ author, contact, timestamp, messages, line })
+        } else {
+            //append last to the last one
+            messages = lines[lines.length - 1].messages
+            messages.push({ text, timestamp })
+            lines[lines.length - 1].messages = messages
+        }
+    })
+    return lines;
+}
