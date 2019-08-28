@@ -2,6 +2,9 @@
 // GLOBAL VARS AND CONFIGS
 //
 var lastMessageOnChat = false;
+var intervals = [];
+var timeouts = [];
+var cancelAllPendingAsync = false;
 var ignoreLastMsg = {};
 var elementConfig = {
     "chats": [0, 0, 5, 2, 0, 3, 0, 0, 0],
@@ -245,6 +248,7 @@ function getScrollConfig() {
  * tells us when reach the top of chatHistory
  */
 async function asyncLoadAllChatHistory() {
+    cancelAllPendingAsync = false;
     speed = scrollSpeedConfig[scrollSpeed] || scrollSpeedConfig['normal']
 
     if (reachTop())
@@ -252,12 +256,16 @@ async function asyncLoadAllChatHistory() {
 
     let promise = new Promise((resolve, reject) => {
         var interval = setInterval(() => {
+            if (cancelAllPendingAsync) {
+                reject('User ask to CANCEL all pending async process')
+            }
             if (reachTop()) {
                 clearInterval(interval);
                 resolve(true);
             }
             scrollChatTop();
         }, getScrollDelay());
+        intervals.push(interval);
     });
     return promise;
 }
@@ -353,4 +361,10 @@ function readCurrentChat() {
         }
     })
     return lines;
+}
+
+function cancelAllPendingAsyncProcess() {
+    cancelAllPendingAsync = true;
+    timeouts.forEach(id => clearTimeout(id));
+    intervals.forEach(id => clearInterval(id));
 }
