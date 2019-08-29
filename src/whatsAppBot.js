@@ -9,7 +9,7 @@ var ignoreLastMsg = {};
 var elementConfig = {
     "chats": [0, 0, 5, 2, 0, 3, 0, 0, 0],
     "chat_icons": [0, 0, 1, 1, 1, 0],
-    "chat_title": [0, 0, 1, 0, 0, 0],
+    "chat_title": [0, 0, 1, 0, 0, 0, 0],
     "chat_lastmsg": [0, 0, 1, 1, 0, 0],
     "chat_lasttime": [0, 0, 1, 0, 1],
     "chat_active": [0, 0],
@@ -20,8 +20,10 @@ var elementConfig = {
 var unreadThreshold = 5; //5 chats unread, loop start again
 var minLoopInterval = rand(120, 60) * 1000; //between 1-2min
 var groupLastReadTimestamp = {}
-const scrollSpeedConfig = { 'robot': { min: 50, max: 100, length: 3000 }, 'fast': { min: 200, max: 400, length: 500 }, 'normal': { min: 1000, max: 2000, length: 300 }, 'slow': { min: 2000, max: 3000, length: 100 } }
+var scrollSpeedConfig = { 'robot': { min: 50, max: 100, length: 3000 }, 'fast': { min: 200, max: 400, length: 500 }, 'normal': { min: 1000, max: 2000, length: 300 }, 'slow': { min: 2000, max: 3000, length: 100 } }
 var scrollSpeed = 'fast';
+var chatReadControl = []
+
 
 //
 // FUNCTIONS
@@ -66,6 +68,7 @@ function getLastMsg() {
 
 function getAllChats() {
     var chats = getElement("chats");
+    var chatList = []
     if (chats) {
         chats = chats.childNodes;
         for (var i in chats) {
@@ -73,13 +76,14 @@ function getAllChats() {
                 continue;
             }
             const chat = chats[i]
-            const title = getElement("chat_title", chat).innerText;
+            const title = chat.querySelector('span[dir="auto"]').title;
             const message = getElement("chat_lastmsg", chat).innerText;
             const timestamp = getElement("chat_lasttime", chat).innerText;
-            const htmlElement = chat
-            console.log({ title, message, timestamp, htmlElement })
+            const htmlElement = chat;
+            chatList.push({ title, message, timestamp, htmlElement });
         }
     }
+    return chatList;
 }
 
 function getUnreadChats() {
@@ -128,40 +132,44 @@ function didYouSendLastMsg() {
 }
 
 // Call the main function again
-const goAgain = (fn, sec) => {
-    // const chat = document.querySelector('div.chat:not(.unread)')
-    // selectChat(chat)
+function goAgain(fn, sec) {
     setTimeout(fn, sec * 1000)
 }
 
 // Dispath an event (of click, por instance)
-const eventFire = (el, etype) => {
+function eventFire(el, etype) {
     var evt = document.createEvent("MouseEvents");
     evt.initMouseEvent(etype, true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
     el.dispatchEvent(evt);
 }
 
-// Select a chat to show the main box
-const selectChat = (chat, cb) => {
-    const title = getElement("chat_title", chat).title;
-    eventFire(chat.firstChild.firstChild, 'mousedown');
-    if (!cb) return;
-    const loopFewTimes = () => {
-        setTimeout(() => {
-            const titleMain = getElement("selected_title").title;
-            if (titleMain !== undefined && titleMain != title) {
-                console.log('not yet');
-                return loopFewTimes();
-            }
-            return cb();
-        }, 300);
-    }
 
-    loopFewTimes();
+// Select a chat to show the main box
+async function selectChat(chat) {
+    const title = chat.querySelector('span[dir="auto"]').title;
+    eventFire(chat.firstChild.firstChild, 'mousedown');
+    var count = 0;
+    let promise = new Promise((resolve, reject) => {
+        var interval = setInterval(() => {
+            count++;
+            console.log('selectChat loop ',count);
+            const titleMain = getElement("selected_title").title;
+            console.log(`title=${title} compared to ${titleMain}`);
+
+            if(titleMain){
+                clearInterval(interval);
+                resolve(titleMain===title)
+            }else if(count>20){
+                clearInterval(interval);
+                reject('selectChat - maximum 20 times reached')
+            }
+        }, 300);
+    });
+    return promise;
 }
 
 // Send a message
-const sendMessage = (chat, message, cb) => {
+function sendMessage(chat, message, cb) {
     //avoid duplicate sending
     var title;
 
@@ -193,12 +201,30 @@ const sendMessage = (chat, message, cb) => {
  * chatContainer must be loaded
  * must have 10 users on group
  */
-function isAnValidChatGroup() {
-    var groupUsers = getElement("group_users").title;
-    var groupHas10UsersOrMore = /(?:.{10,25}\,){10,}/gmi.test(groupUsers);
-    return groupHas10UsersOrMore
-}
+async function isAnValidChatGroup(title) {
+    var count = 0;
+    let promise = new Promise((resolve, reject) => {
+        var interval = setInterval(() => {
+            count++;
+            
+            var groupUsers = getElement("group_users").title;
+            console.log(`isAnValidChatGroup title=${title} groupUsers=${groupUsers}`);
+            
+            //not loaded yet
+            if(groupUsers === 'click here for group info')
+                return;
 
+            if(groupUsers || groupUsers==='' || groupUsers===undefined){
+                clearInterval(interval);
+                resolve(/(?:.{10,25}\,){10,}/gmi.test(groupUsers))
+            }else if(count>20){
+                clearInterval(interval);
+                reject('isAnValidChatGroup - maximum 20 times reached')
+            }
+        }, 300);
+    });
+    return promise;
+}
 
 /**
  * tells us when reach the top
@@ -353,7 +379,7 @@ function readCurrentChat() {
             messages = [];
             messages.push({ text, timestamp })
             lines.push({ author, contact, timestamp, messages, line })
-        } else {
+        } else if (lines.length) {
             //append last to the last one
             messages = lines[lines.length - 1].messages
             messages.push({ text, timestamp })
@@ -368,3 +394,33 @@ function cancelAllPendingAsyncProcess() {
     timeouts.forEach(id => clearTimeout(id));
     intervals.forEach(id => clearInterval(id));
 }
+
+
+function wait(time) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve();
+        }, time);
+    });
+}
+
+
+/**
+ * main loop will compare wich chat is missing to read
+ * check if open the correct chat and load
+ * check if got 10 users on group
+ * 
+ */
+async function loop(){
+    var chats = getAllChats() || [];
+    var unMatchChats = chats.filter(chat => !chatReadControl.find(controlledChat => controlledChat.title === chat.title && controlledChat.message === chat.message && controlledChat.timestamp === chat.timestamp)) || [];
+    
+    for (let index = 0; index < unMatchChats.length; index++) {
+        const unMatchChat = unMatchChats[index];
+        selected = await selectChat(unMatchChat.htmlElement);
+        valid = await isAnValidChatGroup(unMatchChat.title);
+        console.log({t: unMatchChat.title, selected, valid})
+        await wait(300)
+    }
+}
+
