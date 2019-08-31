@@ -152,14 +152,14 @@ async function selectChat(chat) {
     let promise = new Promise((resolve, reject) => {
         var interval = setInterval(() => {
             count++;
-            console.log('selectChat loop ',count);
+            console.log('selectChat loop ', count);
             const titleMain = getElement("selected_title").title;
             console.log(`title=${title} compared to ${titleMain}`);
 
-            if(titleMain){
+            if (titleMain) {
                 clearInterval(interval);
-                resolve(titleMain===title)
-            }else if(count>20){
+                resolve(titleMain === title)
+            } else if (count > 20) {
                 clearInterval(interval);
                 reject('selectChat - maximum 20 times reached')
             }
@@ -206,18 +206,18 @@ async function isAnValidChatGroup(title) {
     let promise = new Promise((resolve, reject) => {
         var interval = setInterval(() => {
             count++;
-            
+
             var groupUsers = getElement("group_users").title;
             console.log(`isAnValidChatGroup title=${title} groupUsers=${groupUsers}`);
-            
+
             //not loaded yet
-            if(groupUsers === 'click here for group info')
+            if (groupUsers === 'click here for group info')
                 return;
 
-            if(groupUsers || groupUsers==='' || groupUsers===undefined){
+            if (groupUsers || groupUsers === '' || groupUsers === undefined) {
                 clearInterval(interval);
                 resolve(/(?:.{10,25}\,){10,}/gmi.test(groupUsers))
-            }else if(count>20){
+            } else if (count > 20) {
                 clearInterval(interval);
                 reject('isAnValidChatGroup - maximum 20 times reached')
             }
@@ -342,7 +342,7 @@ function getTimestamp(htmlElement) {
         return undefined
     const regex = /\[(\d{1,2})\:(\d{1,2})\s(.{2})..(\d{1,2})\/(\d{1,2})\/(\d{1,4})\]/gmi;
     const match = regex.exec(rawTimestap)
-    const timestamp = new Date(match[6], match[4], match[5], match[3] === 'PM' ? parseInt(match[1]) + 12 : match[1], match[2], 0, 0);
+    const timestamp = new Date(match[6], match[4] - 1, match[5], match[3] === 'PM' ? parseInt(match[1]) + 12 : match[1], match[2], 0, 0);
     return timestamp.getTime()
 }
 
@@ -406,21 +406,76 @@ function wait(time) {
 
 
 /**
+ * 
+ * @param {*} date_to_search 
+ */
+function reachDate(date_to_search) {
+    if (!date_to_search || !date_to_search.getTime())
+        return false
+
+    targetDate = date_to_search.getTime();
+    var found = false;
+    var chatList = readCurrentChat();
+    found = chatList.findIndex(e => e.timestamp < targetDate) > -1 ? true : false;
+    console.log(`found :${found}`)
+    return found;
+}
+
+/**
+ * 
+ * @param {scroll until reach the function condition} condition 
+ */
+async function scrollToCondition(condition, maxTimeoutSeconds = 10 * 1000) {
+    if(typeof condition !== 'function')
+        return new Promise.reject('condition must be an function')
+    
+    speed = scrollSpeedConfig[scrollSpeed] || scrollSpeedConfig['normal']
+    var timeout = 0;
+    let promise = new Promise((resolve, reject) => {
+        var interval = setInterval(() => {
+            if (condition()) {
+                clearInterval(interval);
+                clearTimeout(timeout);
+                resolve(true);
+            }
+            scrollChatTop();
+        }, getScrollDelay());
+
+        timeout = setTimeout(() => {
+            clearInterval(interval);
+            reject(`reach ${maxTimeoutSeconds} seconds timeout!`);
+        }, maxTimeoutSeconds*1000);
+    });
+    return promise;
+}
+
+
+
+/**
  * main loop will compare wich chat is missing to read
  * check if open the correct chat and load
  * check if got 10 users on group
  * 
  */
-async function loop(){
+async function loop() {
     var chats = getAllChats() || [];
     var unMatchChats = chats.filter(chat => !chatReadControl.find(controlledChat => controlledChat.title === chat.title && controlledChat.message === chat.message && controlledChat.timestamp === chat.timestamp)) || [];
-    
+
     for (let index = 0; index < unMatchChats.length; index++) {
         const unMatchChat = unMatchChats[index];
         selected = await selectChat(unMatchChat.htmlElement);
         valid = await isAnValidChatGroup(unMatchChat.title);
-        console.log({t: unMatchChat.title, selected, valid})
+        console.log({ t: unMatchChat.title, selected, valid })
         await wait(300)
     }
 }
 
+//days ago
+var daysAgo = 2;
+var oldMessageTimestamp = new Date(new Date(Date.now() - daysAgo * 24 * 3600 * 1000))
+
+//10 seconds to reach last 2 days
+scrollToCondition(()=>{return reachDate(oldMessageTimestamp)});
+
+//40 seconds to reach top
+scrollToCondition(()=>{return reachTop()},40);
