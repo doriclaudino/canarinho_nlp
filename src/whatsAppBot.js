@@ -23,6 +23,7 @@ var groupLastReadTimestamp = {}
 var scrollSpeedConfig = { 'robot': { min: 50, max: 100, length: 3000 }, 'fast': { min: 200, max: 400, length: 500 }, 'normal': { min: 1000, max: 2000, length: 300 }, 'slow': { min: 2000, max: 3000, length: 100 } }
 var scrollSpeed = 'fast';
 var chatReadControl = []
+var key = 'whatsAppBotData'
 
 
 //
@@ -378,7 +379,7 @@ function readCurrentChat() {
         if (header) {
             messages = [];
             messages.push({ text, timestamp })
-            lines.push({ author, contact, timestamp, messages, line })
+            lines.push({ author, contact, timestamp, messages })
         } else if (lines.length) {
             //append last to the last one
             messages = lines[lines.length - 1].messages
@@ -426,9 +427,9 @@ function reachDate(date_to_search) {
  * @param {scroll until reach the function condition} condition 
  */
 async function scrollToCondition(condition, maxTimeoutSeconds = 10 * 1000) {
-    if(typeof condition !== 'function')
+    if (typeof condition !== 'function')
         return new Promise.reject('condition must be an function')
-    
+
     speed = scrollSpeedConfig[scrollSpeed] || scrollSpeedConfig['normal']
     var timeout = 0;
     let promise = new Promise((resolve, reject) => {
@@ -444,12 +445,22 @@ async function scrollToCondition(condition, maxTimeoutSeconds = 10 * 1000) {
         timeout = setTimeout(() => {
             clearInterval(interval);
             reject(`reach ${maxTimeoutSeconds} seconds timeout!`);
-        }, maxTimeoutSeconds*1000);
+        }, maxTimeoutSeconds * 1000);
     });
     return promise;
 }
 
+function save(data) {
+    return localStorage.setItem(key, JSON.stringify(data))
+}
 
+function load() {
+    return JSON.parse(localStorage.getItem(key)) || {}
+}
+
+function getMaxDate(datesArray) {
+    return new Date(Math.max.apply(null, datesArray));
+}
 
 /**
  * main loop will compare wich chat is missing to read
@@ -459,23 +470,83 @@ async function scrollToCondition(condition, maxTimeoutSeconds = 10 * 1000) {
  */
 async function loop() {
     var chats = getAllChats() || [];
-    var unMatchChats = chats.filter(chat => !chatReadControl.find(controlledChat => controlledChat.title === chat.title && controlledChat.message === chat.message && controlledChat.timestamp === chat.timestamp)) || [];
+    var unMatchChats = chats; //.filter(chat => !chatReadControl.find(controlledChat => controlledChat.title === chat.title && controlledChat.message === chat.message && controlledChat.timestamp === chat.timestamp)) || [];
+    var db = load();
 
+    if (!db.groups)
+        db['groups'] = {}
+
+    groups = db.groups;
+    save(db);
     for (let index = 0; index < unMatchChats.length; index++) {
         const unMatchChat = unMatchChats[index];
         selected = await selectChat(unMatchChat.htmlElement);
         valid = await isAnValidChatGroup(unMatchChat.title);
-        console.log({ t: unMatchChat.title, selected, valid })
-        await wait(300)
+        if(!valid)
+            continue;
+
+        let isNewGroup = false;
+
+        if (!groups[unMatchChat.title]) {
+            unMatchChat['messages'] = [];
+            groups[unMatchChat.title] = unMatchChat            
+            isNewGroup = true;
+        }
+
+        let memGroup = groups[unMatchChat.title] 
+
+        let condition;
+        let lastExecutionTmp = new Date().getTime()
+        let maxDate;
+        if (!isNewGroup) {
+            let oldMessagesDates = memGroup['messages'].map(e => e.timestamp)
+            //maxDate = getMaxDate(oldMessagesDates);
+            maxDate = new Date(new Date(Date.now() - 1 * 24 * 3600 * 1000)).getTime()
+            condition = () => { return reachDate(new Date(maxDate)) }
+        }
+        else
+            condition = () => { return reachTop() }
+        console.log('will process',unMatchChat.title)
+        scrollToCondition(()=>{return condition()})
+            .then(e => {
+                let newMessages = readCurrentChat() || [];
+                let oldMessages = memGroup['messages'] || [];
+                memGroup['messages'] = [oldMessages, newMessages];
+                memGroup['lastExecutionTmp'] = lastExecutionTmp
+                memGroup['maxDate'] = maxDate
+                groups[memGroup.title] = memGroup
+                db.groups = groups;
+                save(db);
+            })
+            .catch(e => {
+                console.log(e)
+            });
     }
+    await wait(300)
 }
 
 //days ago
 var daysAgo = 2;
-var oldMessageTimestamp = new Date(new Date(Date.now() - daysAgo * 24 * 3600 * 1000))
+var oldMessageTimestamp = new Date(new Date(Date.now() - 1 * 24 * 3600 * 1000))
 
 //10 seconds to reach last 2 days
-scrollToCondition(()=>{return reachDate(oldMessageTimestamp)});
+scrollToCondition(() => { return reachDate(oldMessageTimestamp) });
 
 //40 seconds to reach top
-scrollToCondition(()=>{return reachTop()},40);
+scrollToCondition(() => { return reachTop() }, 40);
+
+/**
+ * find react component based on htmlNode
+ * @param {*} htmlNodeElement 
+ */
+function findReactComponent(htmlNodeElement) {
+    for (const key in htmlNodeElement) {
+      if (key.startsWith('__reactInternalInstance$')) {
+        const fiberNode = htmlNodeElement[key];
+  
+        return fiberNode && fiberNode.return && fiberNode.return.stateNode;
+      }
+    }
+    return null;
+  };
+
