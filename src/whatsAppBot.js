@@ -554,4 +554,8 @@ function findReactComponent(htmlNodeElement) {
    * example how to get chat-props formatted:
 reactRawChatList.data.filter(e=> e.data.__x_isGroup).map(e=>{ return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
 unreadCount:e.data.__x_unreadCount, lastMessage: e.data.__x_lastReceivedKey, groupMeta: e.data.__x_groupMetadata}})
-   */
+   
+
+reactRawChatList.data.filter(e=> e.data.__x_isGroup && e.data.__x_name === "Grupo teste").map(e=>{ return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
+unreadCount:e.data.__x_unreadCount, lastMessage: e.data.__x_lastReceivedKey, createdAt: e.data.__x_groupMetadata.__x_creation}})
+*/
