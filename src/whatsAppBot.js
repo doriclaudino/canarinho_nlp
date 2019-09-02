@@ -20,7 +20,28 @@ var elementConfig = {
 var unreadThreshold = 5; //5 chats unread, loop start again
 var minLoopInterval = rand(120, 60) * 1000; //between 1-2min
 var groupLastReadTimestamp = {}
-var scrollSpeedConfig = { 'robot': { min: 50, max: 100, length: 3000 }, 'fast': { min: 200, max: 400, length: 500 }, 'normal': { min: 1000, max: 2000, length: 300 }, 'slow': { min: 2000, max: 3000, length: 100 } }
+var scrollSpeedConfig = {
+    'robot': {
+        min: 50,
+        max: 100,
+        length: 3000
+    },
+    'fast': {
+        min: 200,
+        max: 400,
+        length: 500
+    },
+    'normal': {
+        min: 1000,
+        max: 2000,
+        length: 300
+    },
+    'slow': {
+        min: 2000,
+        max: 3000,
+        length: 100
+    }
+}
 var scrollSpeed = 'fast';
 var chatReadControl = []
 var key = 'whatsAppBotData'
@@ -81,7 +102,12 @@ function getAllChats() {
             const message = getElement("chat_lastmsg", chat).innerText;
             const timestamp = getElement("chat_lasttime", chat).innerText;
             const htmlElement = chat;
-            chatList.push({ title, message, timestamp, htmlElement });
+            chatList.push({
+                title,
+                message,
+                timestamp,
+                htmlElement
+            });
         }
     }
     return chatList;
@@ -378,12 +404,23 @@ function readCurrentChat() {
         //create new
         if (header) {
             messages = [];
-            messages.push({ text, timestamp })
-            lines.push({ author, contact, timestamp, messages })
+            messages.push({
+                text,
+                timestamp
+            })
+            lines.push({
+                author,
+                contact,
+                timestamp,
+                messages
+            })
         } else if (lines.length) {
             //append last to the last one
             messages = lines[lines.length - 1].messages
-            messages.push({ text, timestamp })
+            messages.push({
+                text,
+                timestamp
+            })
             lines[lines.length - 1].messages = messages
         }
     })
@@ -482,18 +519,18 @@ async function loop() {
         const unMatchChat = unMatchChats[index];
         selected = await selectChat(unMatchChat.htmlElement);
         valid = await isAnValidChatGroup(unMatchChat.title);
-        if(!valid)
+        if (!valid)
             continue;
 
         let isNewGroup = false;
 
         if (!groups[unMatchChat.title]) {
             unMatchChat['messages'] = [];
-            groups[unMatchChat.title] = unMatchChat            
+            groups[unMatchChat.title] = unMatchChat
             isNewGroup = true;
         }
 
-        let memGroup = groups[unMatchChat.title] 
+        let memGroup = groups[unMatchChat.title]
 
         let condition;
         let lastExecutionTmp = new Date().getTime()
@@ -502,12 +539,17 @@ async function loop() {
             let oldMessagesDates = memGroup['messages'].map(e => e.timestamp)
             //maxDate = getMaxDate(oldMessagesDates);
             maxDate = new Date(new Date(Date.now() - 1 * 24 * 3600 * 1000)).getTime()
-            condition = () => { return reachDate(new Date(maxDate)) }
-        }
-        else
-            condition = () => { return reachTop() }
-        console.log('will process',unMatchChat.title)
-        scrollToCondition(()=>{return condition()})
+            condition = () => {
+                return reachDate(new Date(maxDate))
+            }
+        } else
+            condition = () => {
+                return reachTop()
+            }
+        console.log('will process', unMatchChat.title)
+        scrollToCondition(() => {
+                return condition()
+            })
             .then(e => {
                 let newMessages = readCurrentChat() || [];
                 let oldMessages = memGroup['messages'] || [];
@@ -530,10 +572,14 @@ var daysAgo = 2;
 var oldMessageTimestamp = new Date(new Date(Date.now() - 1 * 24 * 3600 * 1000))
 
 //10 seconds to reach last 2 days
-scrollToCondition(() => { return reachDate(oldMessageTimestamp) });
+scrollToCondition(() => {
+    return reachDate(oldMessageTimestamp)
+});
 
 //40 seconds to reach top
-scrollToCondition(() => { return reachTop() }, 40);
+scrollToCondition(() => {
+    return reachTop()
+}, 40);
 
 /**
  * find react component based on htmlNode
@@ -541,32 +587,35 @@ scrollToCondition(() => { return reachTop() }, 40);
  */
 function findReactComponent(htmlNodeElement) {
     for (const key in htmlNodeElement) {
-      if (key.startsWith('__reactInternalInstance$')) {
-        const fiberNode = htmlNodeElement[key];
-  
-        return fiberNode && fiberNode.return && fiberNode.return.stateNode;
-      }
+        if (key.startsWith('__reactInternalInstance$')) {
+            const fiberNode = htmlNodeElement[key];
+
+            return fiberNode && fiberNode.return && fiberNode.return.stateNode;
+        }
     }
     return null;
-  };
+};
 
 var htmlElements = {
-    "chatList": {id: 'pane-side', path:[0,0]}
-}  
+    "chatList": {
+        id: 'pane-side',
+        path: [0, 0]
+    }
+}
 
 /**
  * find element by id and tranverse all childNodes define on path
  * @param {lookup htmlElements key} name 
  */
-function getHtmlElement(name){
+function getHtmlElement(name) {
     if (!htmlElements[name]) {
         return false;
     }
     var finder = htmlElements[name];
     var parent = document.getElementById(finder.id);
     parent = !parent ? document.body : parent;
-    
-    if(!finder.path)
+
+    if (!finder.path)
         return parent;
 
     var path = finder.path;
@@ -585,22 +634,78 @@ function getHtmlElement(name){
  * find the base element or html body
  * walk on childnodes (when exist)
  */
-function getChats(){
+function getChatsObjects() {
     var html = getHtmlElement('chatList')
+    var total = html.childNodes[0].childElementCount // 146 chats on chrome highest height
     var react = findReactComponent(html)
-    return react.data.filter(e=> e.data.__x_isGroup)
-    .map(e=>{ 
-        return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
-        unreadCount:e.data.__x_unreadCount, lastMessage: e.data.__x_lastReceivedKey, createdAt: e.data.__x_groupMetadata.__x_creation, users: Object.keys(e.data.__x_groupMetadata.participants._index).length}})    
+    return react.data.filter(e => e.data.__x_isGroup)
+        .map(raw => {
+            let last = raw.data.msgs._last;
+            return {
+                name: raw.data.__x_name,
+                isGroup: raw.data.__x_isGroup,
+                id: raw.data.__x_id.user,
+                hasUnread: raw.data.__x_hasUnread,
+                unreadCount: raw.data.__x_unreadCount,
+                msgs: raw.data.msgs,
+                loadedMessages: Object.keys(raw.data.msgs._index).length,
+                lastMessage: last ? {
+                    text: last.__x_text,
+                    timestamp: last.__x_t,
+                    id: last.__x_id.id,
+                    text: last.__x_text,
+                    sender: last.__x_sender ? {
+                        id: last.__x_sender.user,
+                        displayName: last.__x_senderObj.__x_displayName,
+                        formattedName: last.__x_senderObj.__x_formattedName,
+                        formattedUser: last.__x_senderObj.__x_formattedUser,
+                    } : undefined
+                } : undefined,
+                createdAt: raw.data.__x_groupMetadata.__x_creation,
+                users: Object.keys(raw.data.__x_groupMetadata.participants._index).length
+            }
+        })
 }
 
+function cleanChatData(raw) {
+    let last = raw.msgs._last;
+    return {
+        name: raw.name,
+        id: raw.id.user,
+        hasUnread: raw.hasUnread,
+        unreadCount: raw.unreadCount,
+        msgs: raw.msgs,
+        loadedMessages: Object.keys(raw.msgs._index).length,
+        lastMessage: last ? {
+            text: last.text,
+            timestamp: last.t,
+            id: last.id.id,
+            text: last.text,
+            sender: last.sender ? {
+                id: last.sender.user,
+                displayName: last.senderObj.displayName,
+                formattedName: last.senderObj.formattedName,
+                formattedUser: last.senderObj.formattedUser,
+            } : undefined
+        } : undefined,
+        createdAt: raw.groupMetadata.creation,
+        users: Object.keys(raw.groupMetadata.participants._index).length
+    }
+}
 
-  /**
-   * example how to get chat-props formatted:
-reactRawChatList.data.filter(e=> e.data.__x_isGroup).map(e=>{ return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
-unreadCount:e.data.__x_unreadCount, lastMessage: e.data.__x_lastReceivedKey, groupMeta: e.data.__x_groupMetadata}})
-   
+chats = (function loopHtmlChatItems() {
+    let html = getHtmlElement('chatList')
+    let total = html.childNodes[0].childElementCount
 
-reactRawChatList.data.filter(e=> e.data.__x_isGroup && e.data.__x_name === "Grupo teste").map(e=>{ return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
-unreadCount:e.data.__x_unreadCount, lastMessage: e.data.__x_lastReceivedKey, createdAt: e.data.__x_groupMetadata.__x_creation}})
-*/
+    let reactElements = {}
+    for (let index = 0; index < total; index++) {
+        let htmlElement = html.childNodes[0].childNodes[index];
+        let reactComponent = findReactComponent(htmlElement);
+        if (!reactComponent || !reactComponent.props || !reactComponent.props.data || !reactComponent.props.data.data || !reactComponent.props.data.data.isGroup) continue;
+        let rawData = reactComponent.props.data.data        
+        let cleanedData = cleanChatData(rawData)   
+        cleanedData['htmlElement'] = htmlElement
+        reactElements[cleanedData.id] = cleanedData          
+    }
+    return reactElements
+})()
