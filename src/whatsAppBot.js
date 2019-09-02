@@ -550,6 +550,46 @@ function findReactComponent(htmlNodeElement) {
     return null;
   };
 
+var htmlElements = {
+    "chatList": {id: 'pane-side'}
+}  
+
+/**
+ * find element by id and tranverse all childNodes define on path
+ * @param {lookup htmlElements key} name 
+ */
+function getHtmlElement(name){
+    if (!htmlElements[name]) {
+        return false;
+    }
+    var finder = htmlElements[name];
+    var parent = document.getElementById(finder.id);
+    parent = !parent ? document.body : parent;
+    
+    if(!finder.path)
+        return parent;
+
+    var path = finder.path;
+    path.forEach(function (pos) {
+        if (!parent.childNodes[pos]) {
+            return false;
+        }
+        parent = parent.childNodes[pos];
+    });
+    return parent;
+}
+
+
+/**
+ * get the chatList config
+ * find the base element or html body
+ * walk on childnodes (when exist)
+ */
+async function getChats(){
+    return findReactComponent(getHtmlElement('chatList'))
+}
+
+
   /**
    * example how to get chat-props formatted:
 reactRawChatList.data.filter(e=> e.data.__x_isGroup).map(e=>{ return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
