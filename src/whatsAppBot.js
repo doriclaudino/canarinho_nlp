@@ -551,7 +551,7 @@ function findReactComponent(htmlNodeElement) {
   };
 
 var htmlElements = {
-    "chatList": {id: 'pane-side'}
+    "chatList": {id: 'pane-side', path:[0,0]}
 }  
 
 /**
@@ -585,8 +585,13 @@ function getHtmlElement(name){
  * find the base element or html body
  * walk on childnodes (when exist)
  */
-async function getChats(){
-    return findReactComponent(getHtmlElement('chatList'))
+function getChats(){
+    var html = getHtmlElement('chatList')
+    var react = findReactComponent(html)
+    return react.data.filter(e=> e.data.__x_isGroup)
+    .map(e=>{ 
+        return {name: e.data.__x_name,isGroup: e.data.__x_isGroup,id: e.data.__x_id.user, hasUnread: e.data.__x_hasUnread,
+        unreadCount:e.data.__x_unreadCount, lastMessage: e.data.__x_lastReceivedKey, createdAt: e.data.__x_groupMetadata.__x_creation, users: Object.keys(e.data.__x_groupMetadata.participants._index).length}})    
 }
 
 
