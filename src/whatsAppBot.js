@@ -567,6 +567,9 @@ async function loop() {
     await wait(300)
 }
 
+/*
+
+
 //days ago
 var daysAgo = 2;
 var oldMessageTimestamp = new Date(new Date(Date.now() - 1 * 24 * 3600 * 1000))
@@ -580,6 +583,9 @@ scrollToCondition(() => {
 scrollToCondition(() => {
     return reachTop()
 }, 40);
+*/
+
+
 
 /**
  * find react component based on htmlNode
@@ -595,6 +601,10 @@ function findReactComponent(htmlNodeElement) {
     }
     return null;
 };
+
+
+
+
 
 var htmlElements = {
     "chatList": {
@@ -628,45 +638,6 @@ function getHtmlElement(name) {
     return parent;
 }
 
-
-/**
- * get the chatList config
- * find the base element or html body
- * walk on childnodes (when exist)
- */
-function getChatsObjects() {
-    var html = getHtmlElement('chatList')
-    var total = html.childNodes[0].childElementCount // 146 chats on chrome highest height
-    var react = findReactComponent(html)
-    return react.data.filter(e => e.data.__x_isGroup)
-        .map(raw => {
-            let last = raw.data.msgs._last;
-            return {
-                name: raw.data.__x_name,
-                isGroup: raw.data.__x_isGroup,
-                id: raw.data.__x_id.user,
-                hasUnread: raw.data.__x_hasUnread,
-                unreadCount: raw.data.__x_unreadCount,
-                msgs: raw.data.msgs,
-                loadedMessages: Object.keys(raw.data.msgs._index).length,
-                lastMessage: last ? {
-                    text: last.__x_text,
-                    timestamp: last.__x_t,
-                    id: last.__x_id.id,
-                    text: last.__x_text,
-                    sender: last.__x_sender ? {
-                        id: last.__x_sender.user,
-                        displayName: last.__x_senderObj.__x_displayName,
-                        formattedName: last.__x_senderObj.__x_formattedName,
-                        formattedUser: last.__x_senderObj.__x_formattedUser,
-                    } : undefined
-                } : undefined,
-                createdAt: raw.data.__x_groupMetadata.__x_creation,
-                users: Object.keys(raw.data.__x_groupMetadata.participants._index).length
-            }
-        })
-}
-
 function cleanChatData(raw) {
     let last = raw.msgs._last;
     return {
@@ -693,7 +664,8 @@ function cleanChatData(raw) {
     }
 }
 
-chats = (function loopHtmlChatItems() {
+
+function getHtmlChatItems() {
     let html = getHtmlElement('chatList')
     let total = html.childNodes[0].childElementCount
 
@@ -702,10 +674,36 @@ chats = (function loopHtmlChatItems() {
         let htmlElement = html.childNodes[0].childNodes[index];
         let reactComponent = findReactComponent(htmlElement);
         if (!reactComponent || !reactComponent.props || !reactComponent.props.data || !reactComponent.props.data.data || !reactComponent.props.data.data.isGroup) continue;
-        let rawData = reactComponent.props.data.data        
-        let cleanedData = cleanChatData(rawData)   
+        let rawData = reactComponent.props.data.data
+        let cleanedData = cleanChatData(rawData)
+
         cleanedData['htmlElement'] = htmlElement
-        reactElements[cleanedData.id] = cleanedData          
+        reactElements[cleanedData.id] = cleanedData
     }
     return reactElements
-})()
+}
+
+/**
+ * delete recursive data
+ */
+function cleanAndSave(data) {
+    for (const key in data) {
+        if (data.hasOwnProperty(key)) {
+            delete data[key]['htmlElement'];
+            delete data[key]['msgs'];
+        }
+    }
+    save(data)
+}
+
+
+/** not exist on database or lastMessageId not match */
+function start() {
+    chatItems = getHtmlChatItems()
+    oldGroupExecution = load();
+    unreadsByMessageId = Object.keys(chatItems)
+        .filter(e => oldGroupExecution[e] === undefined || oldGroupExecution[e].lastMessage.id !== chatItems[e].lastMessage.id)
+    console.log(unreadsByMessageId.length ? `Found ${unreadsByMessageId.length} unread group(s) 😕` : `Nothing to read 😍`);
+    cleanAndSave(chatItems);
+}
+start();
