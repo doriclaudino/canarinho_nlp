@@ -174,6 +174,7 @@ function eventFire(el, etype) {
 // Select a chat to show the main box
 async function selectChat(chat) {
     const title = chat.querySelector('span[dir="auto"]').title;
+    eventFire(chat.firstChild.firstChild.firstChild, 'mousedown'); //need it for business version?
     eventFire(chat.firstChild.firstChild, 'mousedown');
     var count = 0;
     let promise = new Promise((resolve, reject) => {
@@ -327,7 +328,14 @@ async function asyncLoadAllChatHistory() {
  * scroll Y pixels to top
  */
 function scrollChatTop() {
-    getElement('chat_history').lastChild.scrollTo(0, getScrollLength());
+    getElement('chat_history').lastChild.scrollTo(0, -Math.abs(rand(-300000, -600000)));
+}
+
+/**
+ * scroll Y pixels to bottom
+ */
+function scrollChatBottom() {
+    getElement('chat_history').lastChild.scrollTo(0, -Math.abs(rand(60000000, 70000000)));
 }
 
 /**
@@ -485,6 +493,13 @@ async function scrollToCondition(condition, maxTimeoutSeconds = 10 * 1000) {
         }, maxTimeoutSeconds * 1000);
     });
     return promise;
+}
+
+/**
+ * clean when dev
+ */
+function cleanLocalStorage() {
+    return localStorage.removeItem(key)
 }
 
 function save(data) {
@@ -651,13 +666,9 @@ function cleanChatData(raw) {
             text: last.text,
             timestamp: last.t,
             id: last.id.id,
-            text: last.text,
-            sender: last.sender ? {
-                id: last.sender.user,
-                displayName: last.senderObj.displayName,
-                formattedName: last.senderObj.formattedName,
-                formattedUser: last.senderObj.formattedUser,
-            } : undefined
+            sender: {
+                ...formatSender(last)
+            },
         } : undefined,
         createdAt: raw.groupMetadata.creation,
         users: Object.keys(raw.groupMetadata.participants._index).length
@@ -690,20 +701,192 @@ function cleanAndSave(data) {
     for (const key in data) {
         if (data.hasOwnProperty(key)) {
             delete data[key]['htmlElement'];
-            delete data[key]['msgs'];
         }
     }
     save(data)
 }
+/**
+ * format the sender object
+ * we can memoize it on future
+ */
+function formatSender(obj) {
+    if (!obj || obj.sender === undefined)
+        return undefined
+    return {
+        id: obj.sender ? obj.sender.user : undefined,
+        displayName: obj.senderObj ? obj.senderObj.displayName : undefined,
+        formattedName: obj.senderObj ? obj.senderObj.formattedName : undefined,
+        formattedUser: obj.senderObj ? obj.senderObj.formattedUser : undefined,
+    }
+}
 
+/**
+ * add milliseconds to an date, we need?
+ */
+function createDate(timestamp) {
+    return timestamp * 1000
+}
+
+/**
+ * e2e notification show's when you reach the top of the group
+ */
+function reachEncryptNotification(msgs) {
+    return msgs.find(e => e.type === "e2e_notification" && e.subtype === "encrypt" && e.isNotification)
+}
+
+/**
+ * group creation notification show's when you reach the top of the group
+ */
+function reachGroupCreationNotification(msgs) {
+    return msgs.find(e => e.type === "gp2" && e.subtype === "create" && e.isNotification)
+}
+
+function reachDate(msgs, desiredTimestamp) {
+    return msgs.find(e => e.t < desiredTimestamp)
+}
+
+function loadMoreMsgs() {
+    htmlLoader = document.querySelector('#main > div._1_q7u').querySelector('div._1_vLz')
+    loader = findReactComponent(htmlLoader)
+    loader.props.loadMoreMsgs();
+}
+
+
+/**
+ * scroll to top/bottom, to clean the badges of unreaded msgs
+ * loadMoreMsgs() will load directly to us
+ */
+async function loadMessagesUntilCondition(condition, maxTimeoutSeconds = 10 * 1000) {
+    if (typeof condition !== 'function')
+        return new Promise.reject('condition must be an function')
+
+    var timeout = 0;
+    let promise = new Promise((resolve, reject) => {
+        var interval = setInterval(() => {
+            if (condition()) {
+                clearInterval(interval);
+                clearTimeout(timeout);
+                scrollChatBottom();
+                resolve(true);
+            }
+            scrollChatTop();
+            loadMoreMsgs();
+        }, 500);
+
+        timeout = setTimeout(() => {
+            clearInterval(interval);
+            scrollChatBottom();
+            reject(`reach ${maxTimeoutSeconds} seconds timeout!`);
+        }, maxTimeoutSeconds * 1000);
+    });
+    return promise;
+}
 
 /** not exist on database or lastMessageId not match */
-function start() {
+async function start() {
+    //cleanLocalStorage(); //clean when dev
     chatItems = getHtmlChatItems()
     oldGroupExecution = load();
     unreadsByMessageId = Object.keys(chatItems)
         .filter(e => oldGroupExecution[e] === undefined || oldGroupExecution[e].lastMessage.id !== chatItems[e].lastMessage.id)
     console.log(unreadsByMessageId.length ? `Found ${unreadsByMessageId.length} unread group(s) 😕` : `Nothing to read 😍`);
-    cleanAndSave(chatItems);
+
+    /**
+     * run in every unread chat
+     */
+    for (const key in unreadsByMessageId) {
+        if (unreadsByMessageId.hasOwnProperty(key)) {
+            const chatId = unreadsByMessageId[key];
+            const unreadChatGroup = chatItems[chatId];
+            const oldExecutionRef = oldGroupExecution[chatId]
+
+            const selectedChat = await selectChat(unreadChatGroup.htmlElement)
+            if (!selectChat) continue;
+
+            startDate = new Date()
+            console.group(`group ${chatId} - ${unreadChatGroup.name}`)
+            console.log(`- start at ${startDate}`)
+
+            lastExecution = {
+                timestamp: new Date().getTime()
+            }
+            chatMsgsHtml = document.querySelector('div._1ays2')
+            chatMsgsReact = findReactComponent(chatMsgsHtml);
+
+            //is new group
+            try {
+                if (oldExecutionRef === undefined) {
+                    console.log(`- new group`)
+                    await loadMessagesUntilCondition(() => {
+                        return reachEncryptNotification(chatMsgsReact.props.msgs)
+                    }, 30)
+                } else {
+                    console.log(`- lastExecution at ${new Date(oldExecutionRef.lastExecution.timestamp)}`)
+                    await loadMessagesUntilCondition(() => {
+                        return (reachDate(chatMsgsReact.props.msgs, createDate(oldExecutionRef.lastMessageReaded.timestamp)) || reachEncryptNotification(chatMsgsReact.props.msgs))
+                    }, 30)
+                }
+            } catch (error) {
+                console.log(`- error ${error}`)
+                lastExecution.sucess = false
+                lastExecution.error = error
+            }
+
+
+            last = chatMsgsReact.props.msgs.reduce((prev, current) => (prev.t > current.t) ? prev : current)
+            lastMessageReaded = {
+                text: last.text,
+                timestamp: last.t,
+                id: last.id.id,
+                sender: {
+                    ...formatSender(last)
+                },
+            }
+            msgsReaded = chatMsgsReact.props.msgs.length
+            totalMsgsReaded = unreadChatGroup.totalMsgsReaded !== undefined ? unreadChatGroup.totalMsgsReaded + totalMsgsReaded : msgsReaded
+            msgs = {}
+            chatMsgsReact.props.msgs.forEach(rawMsg => {
+                msgs[rawMsg.id.id] = {
+                    id: rawMsg.id.id,
+                    text: rawMsg.text,
+                    timestamp: rawMsg.t,
+                    sender: {
+                        ...formatSender(rawMsg)
+                    },
+                }
+            });
+
+            appendMsgs = {
+                ...msgs,
+                ...unreadChatGroup.msgs
+            }
+            msgsLength = Object.keys(appendMsgs).length;
+
+            console.log(`- total msgs readed ${totalMsgsReaded}`)
+            console.log(`- total msgs stored ${msgsLength}`)
+
+            endDate = new Date();
+            duration = endDate - startDate
+            lastExecution.duration = duration
+            toSaveObject = {
+                ...unreadChatGroup,
+                msgsReaded,
+                msgs: appendMsgs,
+                msgsLength,
+                totalMsgsReaded,
+                lastMessageReaded,
+                lastExecution
+            }
+            console.log(`- saving`)
+            oldGroupExecution[chatId] = toSaveObject
+            cleanAndSave(oldGroupExecution);
+
+            console.log(`- duration ${duration/1000}sec (${duration} ms)`)
+            console.log(`- end at ${endDate}`)
+            console.groupEnd();
+            await wait(1000)
+        }
+    }
 }
+
 start();
