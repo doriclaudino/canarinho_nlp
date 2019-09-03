@@ -890,3 +890,18 @@ async function start() {
 }
 
 start();
+
+
+/**
+ * need refactoring:
+ * 
+ * * memoize users/senders
+ *  sender: [id] (maintain a global senders/participans schema and not keep on msgs/groups data)
+ * 
+ * * memoize strings with id: one string could have more than one id because is more like will repeatly strings
+ *  "hello how are you?" : [ids...,ids...]
+ * 
+ * * MID,FRONT,END show us on html if is an multine msg, we need to figureout on react strut
+ * * or skip multine messages?
+ * 
+ */
