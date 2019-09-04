@@ -7,6 +7,10 @@ var MSG_POSITION = {
     END: "END",
     SINGLE: "SINGLE"
 }
+
+var NEW_GROUP_MAX_TIMEOUT_SEC = 120;
+var GROUP_MAX_TIMEOUT_SEC = 30;
+
 var lastMessageOnChat = false;
 var intervals = [];
 var timeouts = [];
@@ -148,8 +152,11 @@ function save(data) {
     return localStorage.setItem(key, JSON.stringify(data))
 }
 
-function load() {
-    return JSON.parse(localStorage.getItem(key)) || {}
+function load(parse = true) {
+    if (parse)
+        return JSON.parse(localStorage.getItem(key)) || {}
+    else
+        return localStorage.getItem(key)
 }
 
 function getMaxDate(datesArray) {
@@ -260,7 +267,6 @@ function cleanAndSave(data) {
         }
     }
     save(data);
-    exportLocalFile(data);
 }
 
 /**
@@ -270,11 +276,15 @@ function cleanAndSave(data) {
  */
 function exportLocalFile(data, filename) {
     if (!data) {
-        console.error('Console.save: No data')
+        console.error('exportLocalFile - no data')
         return;
     }
 
-    if (!filename) filename = `export_${key}.json`
+    if (!filename) {
+        console.error('exportLocalFile - no filename')
+        return;
+    }
+
 
     if (typeof data === "object") {
         data = JSON.stringify(data, undefined, 4)
@@ -291,7 +301,6 @@ function exportLocalFile(data, filename) {
     a.dataset.downloadurl = ['text/json', a.download, a.href].join(':')
     e.initMouseEvent('click', true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null)
     a.dispatchEvent(e)
-    console.log(a)
     setTimeout(() => {
         document.removeChild(a);
     }, 1000);
@@ -414,16 +423,13 @@ async function start() {
                     console.log(`- new group or never reach the top`)
                     result = await loadMessagesUntilCondition(() => {
                         return reachEncryptNotification(unreadChatGroup.msgs._models)
-                    }, 5);
-                    console.log({
-                        result
-                    })
+                    }, NEW_GROUP_MAX_TIMEOUT_SEC);
                     reachTopOnce = true;
                 } else {
                     console.log(`- lastExecution at ${new Date(oldExecutionRef.lastExecution.timestamp)}`)
                     await loadMessagesUntilCondition(() => {
                         return (reachDate(unreadChatGroup.msgs._models, createDate(oldExecutionRef.lastMessageReaded.timestamp)) || reachEncryptNotification(unreadChatGroup.msgs._models))
-                    }, 5)
+                    }, GROUP_MAX_TIMEOUT_SEC)
                 }
             } catch (error) {
                 console.log(`- error ${error}`)
@@ -553,7 +559,6 @@ async function start() {
                 lastExecution,
                 reachTopOnce
             }
-            console.log(`- saving`)
             oldGroupExecution[chatId] = toSaveObject
             oldGroupExecution['senders'] = senders;
             console.log(oldGroupExecution[chatId])
