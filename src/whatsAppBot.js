@@ -9,7 +9,7 @@ var MSG_POSITION = {
 }
 
 var NEW_GROUP_MAX_TIMEOUT_SEC = 120;
-var GROUP_MAX_TIMEOUT_SEC = 30;
+var GROUP_MAX_TIMEOUT_SEC = 20;
 
 var lastMessageOnChat = false;
 var intervals = [];
@@ -264,6 +264,7 @@ function cleanAndSave(data) {
     for (const key in data) {
         if (data.hasOwnProperty(key)) {
             delete data[key]['htmlElement'];
+            delete data[key]['msgs'];
         }
     }
     save(data);
@@ -559,9 +560,15 @@ async function start() {
                 lastExecution,
                 reachTopOnce
             }
+            console.log(`- saving control file on LocalStorageAPI`)
             oldGroupExecution[chatId] = toSaveObject
             oldGroupExecution['senders'] = senders;
             console.log(oldGroupExecution[chatId])
+
+            /**
+             * delete htmlElement and msgs
+             * msgs will be exported at the end
+             */
             cleanAndSave(oldGroupExecution);
 
             console.log(`- duration ${duration/1000}sec (${duration} ms)`)
@@ -570,6 +577,9 @@ async function start() {
             await wait(500)
         }
     }
+
+    filename = `export_${key}.json`
+    exportLocalFile(JSON.stringify(oldGroupExecution), filename)
     console.groupEnd();
 }
 
