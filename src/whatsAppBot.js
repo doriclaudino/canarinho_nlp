@@ -1,6 +1,12 @@
 //
 // GLOBAL VARS AND CONFIGS
 //
+var MSG_POSITION = {
+    FRONT: "FRONT",
+    MID: "MID",
+    END: "END",
+    SINGLE: "SINGLE"
+}
 var lastMessageOnChat = false;
 var intervals = [];
 var timeouts = [];
@@ -180,9 +186,7 @@ async function selectChat(chat) {
     let promise = new Promise((resolve, reject) => {
         var interval = setInterval(() => {
             count++;
-            console.log('selectChat loop ', count);
             const titleMain = getElement("selected_title").title;
-            console.log(`title=${title} compared to ${titleMain}`);
 
             if (titleMain) {
                 clearInterval(interval);
@@ -328,7 +332,7 @@ async function asyncLoadAllChatHistory() {
  * scroll Y pixels to top
  */
 function scrollChatTop() {
-    getElement('chat_history').lastChild.scrollTo(0, -Math.abs(rand(-300000, -600000)));
+    getElement('chat_history').lastChild.scrollTo(0, -Math.abs(rand(100, 2000)));
 }
 
 /**
@@ -787,9 +791,10 @@ async function start() {
     //cleanLocalStorage(); //clean when dev
     chatItems = getHtmlChatItems()
     oldGroupExecution = load();
+    senders = oldGroupExecution['senders'] || {}
     unreadsByMessageId = Object.keys(chatItems)
-        .filter(e => oldGroupExecution[e] === undefined || oldGroupExecution[e].lastMessage.id !== chatItems[e].lastMessage.id)
-    console.log(unreadsByMessageId.length ? `Found ${unreadsByMessageId.length} unread group(s) 😕` : `Nothing to read 😍`);
+        .filter(e => (oldGroupExecution[e] && !oldGroupExecution[e].reachTopOnce) || oldGroupExecution[e] === undefined || oldGroupExecution[e].lastMessage.id !== chatItems[e].lastMessage.id)
+    console.group(unreadsByMessageId.length ? `Found ${unreadsByMessageId.length} unread group(s) 😕 ${new Date}` : `Nothing to read 😍 ${new Date}`);
 
     /**
      * run in every unread chat
@@ -801,7 +806,7 @@ async function start() {
             const oldExecutionRef = oldGroupExecution[chatId]
 
             const selectedChat = await selectChat(unreadChatGroup.htmlElement)
-            if (!selectChat) continue;
+            if (!selectedChat) continue;
 
             startDate = new Date()
             console.group(`group ${chatId} - ${unreadChatGroup.name}`)
@@ -812,19 +817,24 @@ async function start() {
             }
             chatMsgsHtml = document.querySelector('div._1ays2')
             chatMsgsReact = findReactComponent(chatMsgsHtml);
+            reachTopOnce = (oldExecutionRef !== undefined && oldExecutionRef['reachTopOnce'] === true);
 
-            //is new group
+            //new group or never reach the top
             try {
-                if (oldExecutionRef === undefined) {
-                    console.log(`- new group`)
-                    await loadMessagesUntilCondition(() => {
-                        return reachEncryptNotification(chatMsgsReact.props.msgs)
-                    }, 30)
+                if (!reachTopOnce) {
+                    console.log(`- new group or never reach the top`)
+                    result = await loadMessagesUntilCondition(() => {
+                        return reachEncryptNotification(unreadChatGroup.msgs._models)
+                    }, 5);
+                    console.log({
+                        result
+                    })
+                    reachTopOnce = true;
                 } else {
                     console.log(`- lastExecution at ${new Date(oldExecutionRef.lastExecution.timestamp)}`)
                     await loadMessagesUntilCondition(() => {
-                        return (reachDate(chatMsgsReact.props.msgs, createDate(oldExecutionRef.lastMessageReaded.timestamp)) || reachEncryptNotification(chatMsgsReact.props.msgs))
-                    }, 30)
+                        return (reachDate(unreadChatGroup.msgs._models, createDate(oldExecutionRef.lastMessageReaded.timestamp)) || reachEncryptNotification(unreadChatGroup.msgs._models))
+                    }, 5)
                 }
             } catch (error) {
                 console.log(`- error ${error}`)
@@ -832,34 +842,109 @@ async function start() {
                 lastExecution.error = error
             }
 
-
-            last = chatMsgsReact.props.msgs.reduce((prev, current) => (prev.t > current.t) ? prev : current)
-            lastMessageReaded = {
-                text: last.text,
-                timestamp: last.t,
-                id: last.id.id,
-                sender: {
-                    ...formatSender(last)
+            lastAndFirstCursor = Array.from(unreadChatGroup.msgs._models).reduce((prev, curr) => {
+                if (prev.last.t < curr.t || prev.last.t === undefined) prev.last = curr;
+                if (prev.first.t > curr.t || prev.first.t === undefined) prev.first = curr;
+                return prev
+            }, {
+                last: {
+                    t: undefined
                 },
-            }
-            msgsReaded = chatMsgsReact.props.msgs.length
-            totalMsgsReaded = unreadChatGroup.totalMsgsReaded !== undefined ? unreadChatGroup.totalMsgsReaded + totalMsgsReaded : msgsReaded
-            msgs = {}
-            chatMsgsReact.props.msgs.forEach(rawMsg => {
-                msgs[rawMsg.id.id] = {
-                    id: rawMsg.id.id,
-                    text: rawMsg.text,
-                    timestamp: rawMsg.t,
+                first: {
+                    t: undefined
+                }
+            })
+
+            if (lastAndFirstCursor) {
+                var {
+                    first,
+                    last
+                } = lastAndFirstCursor
+                lastMessageReaded = {
+                    text: lastAndFirstCursor.last.text,
+                    timestamp: last.t,
+                    id: last.id.id,
                     sender: {
-                        ...formatSender(rawMsg)
+                        ...formatSender(last)
                     },
+                }
+                firstMessageReaded = {
+                    text: first.text,
+                    timestamp: first.t,
+                    id: first.id.id,
+                    subtype: last.subtype,
+                    type: last.type,
+                    sender: {
+                        ...formatSender(first)
+                    },
+                }
+            } else {
+                lastAndFirstCursor = undefined
+                firstMessageReaded = undefined
+            }
+
+            msgsReaded = unreadChatGroup.msgs._models.length
+            totalMsgsReaded = unreadChatGroup.totalMsgsReaded !== undefined ? unreadChatGroup.totalMsgsReaded + totalMsgsReaded : msgsReaded
+
+            msgs = {}
+
+            //loop html chat lines
+            //because we can't figureout top/mid/end singles messages styles by reactProps
+            parentMsgsId = undefined;
+            enterKey = '\u23CE'; //ENTER KEY
+            if (!chatMsgsHtml.hasChildNodes()) return;
+            Array.from(chatMsgsHtml.children).forEach(line => {
+                reactLine = findReactComponent(line)
+                if (!reactLine) return;
+
+                rawMsg = reactLine.props.msg
+
+                /** we save the first id when starting multiline msg */
+                if (reactLine.props.position === MSG_POSITION.FRONT)
+                    parentMsgsId = rawMsg.id.id;
+                else if (reactLine.props.position === MSG_POSITION.SINGLE)
+                    parentMsgsId = undefined;
+
+                sender = {
+                    ...formatSender(rawMsg)
+                }
+
+                //skip if: not an text, sender from system
+                if (rawMsg._ProxyState$state.text === undefined || sender.id === undefined)
+                    return;
+
+                //updte sender
+                senders[sender.id] = {
+                    displayName: sender.displayName,
+                    formattedName: sender.formattedName,
+                    formattedUser: sender.formattedUser,
+                }
+
+                //append
+                if (parentMsgsId !== undefined) {
+                    text = rawMsg._ProxyState$state.text
+                    msgs[parentMsgsId] = {
+                        senderId: sender.id,
+                        text: msgs[parentMsgsId] === undefined ? text : msgs[parentMsgsId].text + enterKey + text, //save and appens multines
+                        timestamp: rawMsg._ProxyState$state.t,
+                    }
+                } else {
+                    //MSG_POSITION.SINGLE
+                    msgs[rawMsg.id.id] = {
+                        senderId: sender.id,
+                        text: rawMsg._ProxyState$state.text,
+                        timestamp: rawMsg._ProxyState$state.t,
+                    }
                 }
             });
 
-            appendMsgs = {
+            appendMsgs = oldExecutionRef === undefined ? {
                 ...msgs,
-                ...unreadChatGroup.msgs
+            } : {
+                ...msgs,
+                ...oldExecutionRef.msgs
             }
+
             msgsLength = Object.keys(appendMsgs).length;
 
             console.log(`- total msgs readed ${totalMsgsReaded}`)
@@ -875,18 +960,23 @@ async function start() {
                 msgsLength,
                 totalMsgsReaded,
                 lastMessageReaded,
-                lastExecution
+                firstMessageReaded,
+                lastExecution,
+                reachTopOnce
             }
             console.log(`- saving`)
             oldGroupExecution[chatId] = toSaveObject
+            oldGroupExecution['senders'] = senders;
+            console.log(oldGroupExecution[chatId])
             cleanAndSave(oldGroupExecution);
 
             console.log(`- duration ${duration/1000}sec (${duration} ms)`)
             console.log(`- end at ${endDate}`)
             console.groupEnd();
-            await wait(1000)
+            await wait(500)
         }
     }
+    console.groupEnd();
 }
 
 start();
@@ -895,13 +985,9 @@ start();
 /**
  * need refactoring:
  * 
- * * memoize users/senders
- *  sender: [id] (maintain a global senders/participans schema and not keep on msgs/groups data)
  * 
  * * memoize strings with id: one string could have more than one id because is more like will repeatly strings
  *  "hello how are you?" : [ids...,ids...]
  * 
- * * MID,FRONT,END show us on html if is an multine msg, we need to figureout on react strut
- * * or skip multine messages?
  * 
  */
