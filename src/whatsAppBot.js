@@ -8,12 +8,16 @@ var MSG_POSITION = {
     SINGLE: "SINGLE"
 }
 
+var userRequestStopError = 'user type console.stop()'
+var consoleOpenLevel = 0;
+var stopRequested = false;
 var NEW_GROUP_MAX_TIMEOUT_SEC = 120;
 var GROUP_MAX_TIMEOUT_SEC = 20;
 
 var lastMessageOnChat = false;
-var intervals = [];
-var timeouts = [];
+var intervals = {};
+var timeouts = {};
+var promises = {};
 var cancelAllPendingAsync = false;
 var ignoreLastMsg = {};
 var elementConfig = {
@@ -83,7 +87,8 @@ function getElement(id, parent) {
 
 // Call the main function again
 function goAgain(fn, sec) {
-    setTimeout(fn, sec * 1000)
+    timeout = setTimeout(fn, sec * 1000)
+    timeouts['goAgain'] = timeout
 }
 
 // Dispath an event (of click, por instance)
@@ -101,7 +106,8 @@ async function selectChat(chat) {
     eventFire(chat.firstChild.firstChild, 'mousedown');
     var count = 0;
     let promise = new Promise((resolve, reject) => {
-        var interval = setInterval(() => {
+        promises['selectChat'] = reject
+        var interval = setInterval(() => {            
             count++;
             const titleMain = getElement("selected_title").title;
 
@@ -113,7 +119,8 @@ async function selectChat(chat) {
                 reject('selectChat - maximum 20 times reached')
             }
         }, 300);
-    });
+        intervals['selectChat'] = interval;
+    });    
     return promise;
 }
 
@@ -135,9 +142,10 @@ function scrollChatBottom() {
 /** just wait :D */
 function wait(time) {
     return new Promise(resolve => {
-        setTimeout(() => {
+        timeout = setTimeout(() => {
             resolve();
         }, time);
+        timeouts['wait'] = timeout
     });
 }
 
@@ -302,11 +310,49 @@ function exportLocalFile(data, filename) {
     a.dataset.downloadurl = ['text/json', a.download, a.href].join(':')
     e.initMouseEvent('click', true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null)
     a.dispatchEvent(e)
-    setTimeout(() => {
+    timeout = setTimeout(() => {
         document.removeChild(a);
     }, 1000);
+    timeouts['exportLocalFile'] = timeout
 }
 
+
+console.stop = function () {
+    stopRequested = true;
+    clearAllIntervals();
+    clearAllTimeouts();
+    rejectAllPromises();
+    for (let index = 0; index < consoleOpenLevel; index++) {
+        console.groupEnd();
+    }
+    stopRequested = false;
+    return true;
+}
+
+function clearAllIntervals() {
+    for (const key in intervals) {
+        if (intervals.hasOwnProperty(key)) {
+            clearInterval(intervals[key]);
+        }
+    }
+}
+
+function clearAllTimeouts() {
+    for (const key in timeouts) {
+        if (timeouts.hasOwnProperty(key)) {
+            clearTimeout(timeouts[key]);
+        }
+    }
+}
+
+function rejectAllPromises() {
+    for (const key in promises) {
+        if (promises.hasOwnProperty(key)) {
+            reject = promises[key]
+            reject(userRequestStopError);
+        }
+    }
+}
 
 /**
  * format the sender object
@@ -365,7 +411,8 @@ async function loadMessagesUntilCondition(condition, maxTimeoutSeconds = 10 * 10
 
     var timeout = 0;
     let promise = new Promise((resolve, reject) => {
-        var interval = setInterval(() => {
+        promises['loadMessagesUntilCondition'] = reject
+        var interval = setInterval(() => {            
             if (condition()) {
                 clearInterval(interval);
                 clearTimeout(timeout);
@@ -375,18 +422,20 @@ async function loadMessagesUntilCondition(condition, maxTimeoutSeconds = 10 * 10
             scrollChatTop();
             loadMoreMsgs();
         }, 500);
-
+        intervals['loadMessagesUntilCondition'] = interval;
         timeout = setTimeout(() => {
             clearInterval(interval);
             scrollChatBottom();
             reject(`reach ${maxTimeoutSeconds} seconds timeout!`);
         }, maxTimeoutSeconds * 1000);
+        timeouts['loadMessagesUntilCondition'] = interval;
     });
     return promise;
 }
 
 /** not exist on database or lastMessageId not match */
 async function start() {
+    console.warn(`run console.stop() to stop all processes`)
     //cleanLocalStorage(); //clean when dev
     chatItems = getHtmlChatItems()
     oldGroupExecution = load();
@@ -394,7 +443,7 @@ async function start() {
     unreadsByMessageId = Object.keys(chatItems)
         .filter(e => (oldGroupExecution[e] && !oldGroupExecution[e].reachTopOnce) || oldGroupExecution[e] === undefined || oldGroupExecution[e].lastMessage.id !== chatItems[e].lastMessage.id)
     console.group(unreadsByMessageId.length ? `Found ${unreadsByMessageId.length} unread group(s) 😕 ${new Date}` : `Nothing to read 😍 ${new Date}`);
-
+    consoleOpenLevel = 1;
     /**
      * run in every unread chat
      */
@@ -408,7 +457,8 @@ async function start() {
             if (!selectedChat) continue;
 
             startDate = new Date()
-            console.group(`group ${chatId} - ${unreadChatGroup.name}`)
+            console.group(`group ${chatId} - ${unreadChatGroup.name}`);
+            consoleOpenLevel = 2;
             console.log(`- start at ${startDate}`)
 
             lastExecution = {
@@ -433,6 +483,8 @@ async function start() {
                     }, GROUP_MAX_TIMEOUT_SEC)
                 }
             } catch (error) {
+                if(error === userRequestStopError)
+                    return;
                 console.log(`- error ${error}`)
                 lastExecution.sucess = false
                 lastExecution.error = error
@@ -574,6 +626,7 @@ async function start() {
             console.log(`- duration ${duration/1000}sec (${duration} ms)`)
             console.log(`- end at ${endDate}`)
             console.groupEnd();
+            consoleOpenLevel = 1;
             await wait(500)
         }
     }
@@ -581,6 +634,7 @@ async function start() {
     filename = `export_${key}.json`
     exportLocalFile(JSON.stringify(oldGroupExecution), filename)
     console.groupEnd();
+    consoleOpenLevel = 0;
 }
 
 start();
