@@ -3,31 +3,31 @@ const fs = require("fs");
 const sw = require("stopword");
 const TfIdf = natural.TfIdf;
 const tfidf = new TfIdf();
+const program = require("commander");
+const pjson = require("../package.json");
 
-const readline = require("readline");
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+program
+  .version(pjson.version)
+  .command("import <dir>")
+  .option("-f, --tfidf", "show tfidf frequency analysis")
+  .option("-s, --suffix <sufix>", "suffix to save")
+  .action(function(dir, options) {
+    const { tfidf = false, suffix = "clean.json" } = options;
+    const saveFileName = dir + suffix;
+    main(dir, tfidf, saveFileName);
+  });
+program.parse(process.argv);
 
-rl.question("Inform full filepath of extract WhatsApp chat: ", answer => {
-  // TODO: Log the answer in a database
-  try {
-    main(answer);
-  } catch (error) {
-    console.log(error);
-    rl.close();
-  }
-});
-
-function main(path) {
+function main(path, tfidf, saveFileName) {
   let doc = readFile(path);
   let lines = breakInLines(doc);
   let cleanedSentences = cleanData(lines);
-  saveToDisk(cleanedSentences, path + ".cleaned.json");
+  saveToDisk(cleanedSentences, saveFileName);
 
-  wordFrequency(cleanedSentences);
-  printWordFrequency();
+  if (tfidf) {
+    wordFrequency(cleanedSentences);
+    printWordFrequency();
+  }
 }
 
 function readFile(path) {
@@ -90,8 +90,8 @@ function wordFrequency(sentences) {
      * remove stop words like com,em,no,ou,de,etc
      */
     tempTokens = sentence.split(" ");
-    tempTokens = sw.removeStopwords(tempTokens, sw.pt);
-    tempTokens = sw.removeStopwords(tempTokens, ["etc", "no", "em", "ou"]);
+    tempTokens = sw.removeStopwords(tempTokens, sw.br);
+    //tempTokens = sw.removeStopwords(tempTokens, ["etc", "no", "em", "ou"]);
     tfidf.addDocument(tempTokens);
   });
 }
@@ -104,7 +104,7 @@ function printWordFrequency() {
 
 /**
  * todo
- * 
+ *
  * use params instead always ask user
  * check tfidf cleaning rules
  * remove accents from portuguese or lemmatize
