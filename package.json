@@ -9,6 +9,7 @@
   "author": "doriclaudino",
   "license": "ISC",
   "dependencies": {
+    "commander": "^3.0.1",
     "natural": "^0.6.3",
     "stopword": "^0.3.3"
   }
