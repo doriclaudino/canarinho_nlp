@@ -92,7 +92,7 @@ function cleanData(sentences = [], removeAccent, removeEmoji) {
     if (removeEmoji) removeNewLine = removeEmoji(removeNewLine);
 
     //replace enter
-    removeNewLine = removeNewLine.replace('\n', '⏎');
+    removeNewLine = removeNewLine.replace(/\n/gmi, '⏎');
 
     filteredTokens.push(removeNewLine);
   }
