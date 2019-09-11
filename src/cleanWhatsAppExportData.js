@@ -1,5 +1,6 @@
 const natural = require("natural");
 const fs = require("fs");
+const path = require("path");
 const sw = require("stopword");
 const TfIdf = natural.TfIdf;
 const tfidf = new TfIdf();
@@ -10,6 +11,7 @@ const latinMap = require("./latinMap");
 program
   .version(pjson.version)
   .command("import <dir>")
+  .option("--saveas <filename>", "file name to save", undefined)
   .option("--saveoriginal", "analyses clean data, BUT save original texts", false)
   .option("--minlength <length>", "skip strings with length less than <min>", 4)
   .option("-s, --suffix <suffix>", "suffix to save", ".clean.json")
@@ -29,7 +31,7 @@ program
   });
 program.parse(process.argv);
 
-function main(path, options) {
+function main(dir, options) {
   const {
     tfidf = false,
       suffix,
@@ -43,20 +45,26 @@ function main(path, options) {
       minlength,
       containsfilter,
       ignorefilter,
-      saveoriginal
+      saveoriginal,
+      saveas
   } = options;
-  const saveFileName = path + suffix;
+  const saveFileName = dir + suffix;
 
-  let doc = readFile(path);
+  let doc = readFile(dir);
   let lines = breakInLines(doc);
   let SentencesObject = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter, ignorefilter);
 
   let cleanedSentences = SentencesObject.map(e => e.cleaned)
+  let toSave = cleanedSentences
+  let toSavePath = saveFileName
 
-  if (saveoriginal) {
-    let rawSentences = SentencesObject.map(e => removeLineDataHeader(e.raw))
-    saveToDisk(rawSentences, saveFileName);
-  }
+  if (saveoriginal)
+    toSave = SentencesObject.map(e => removeLineDataHeader(e.raw))
+
+  if (saveas !== undefined)
+    toSavePath = toSavePath.replace(path.basename(toSavePath), saveas);
+
+  saveToDisk(toSave, toSavePath);
 
   if (tfidf) {
     wordFrequency(cleanedSentences);
@@ -64,8 +72,8 @@ function main(path, options) {
   }
 }
 
-function readFile(path) {
-  return fs.readFileSync(path, "utf8");
+function readFile(dir) {
+  return fs.readFileSync(dir, "utf8");
 }
 
 function breakInLines(document) {
