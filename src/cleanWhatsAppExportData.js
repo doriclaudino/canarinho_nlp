@@ -124,9 +124,9 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
   return filteredTokens;
 }
 
-//https://regex101.com/r/dUAl4h/1
+//https://regex101.com/r/dUAl4h/2
 function removePhoneNumber(str) {
-  return str.replace(/(\d{9,12}|\d{3,4}\s\d{3}\s\d{4}|\d\s\d{3,4}\s\d{3}\s\d{4})/gmi, '')
+  return str.replace(/(\d{9,12}|(\d\s)?\d{3,4}\s\d{3}\s\d{4})/gmi, '')
 }
 
 function isEmpty(str) {
