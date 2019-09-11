@@ -10,6 +10,7 @@ const latinMap = require("./latinMap");
 program
   .version(pjson.version)
   .command("import <dir>")
+  .option("--minlength <length>", "skip strings with length less than <min>", 4)
   .option("-s, --suffix <suffix>", "suffix to save", ".clean.json")
   .option("--tfidf", "show tfidf frequency analysis", false)
   .option("--accent", "allow accents", false)
@@ -18,6 +19,8 @@ program
   .option("--doublespaces", "allow doublespaces", false)
   .option("--duplicates", "allow duplicates texts", false)
   .option("--empty", "allow empty texts", false)
+  .option("--contact", "allow contacts like email and phonenumbers on texts", false)
+  .option("--containsfilter <string>", "filter lines", false)
   .action(function (dir, options) {
     crossPath = dir.replace('\\', '/')
     main(crossPath, options);
@@ -33,13 +36,16 @@ function main(path, options) {
       lowercase,
       doublespaces,
       duplicates,
-      empty
+      empty,
+      contact,
+      minlength,
+      containsfilter
   } = options;
   const saveFileName = path + suffix;
 
   let doc = readFile(path);
   let lines = breakInLines(doc);
-  let cleanedSentences = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty);
+  let cleanedSentences = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter);
   saveToDisk(cleanedSentences, saveFileName);
 
   if (tfidf) {
@@ -59,14 +65,17 @@ function breakInLines(document) {
   return tokenizer.tokenize(document);
 }
 
-function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoubleSpaces, allowDuplicates, allowEmpty) {
+function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoubleSpaces, allowDuplicates, allowEmpty, allowContact, minLengthAllowed, containsFilter) {
   console.log(`
   allowAccent: ${allowAccent}, 
   allowEmoji: ${allowEmoji}, 
   lowerCase: ${lowerCase}, 
   allowDoubleSpaces: ${allowDoubleSpaces},
   allowDuplicates: ${allowDuplicates},
-  allowEmpty: ${allowEmpty}
+  allowEmpty: ${allowEmpty},
+  allowContact: ${allowContact},
+  minLengthAllowed: ${minLengthAllowed},
+  containsFilter: ${containsFilter},
   `)
   if (!sentences.length) return sentences;
 
@@ -111,22 +120,46 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     if (!allowDoubleSpaces)
       copyLine = removeDoubleSpaces(copyLine)
 
+    if (!allowContact)
+      copyLine = removeContact(copyLine)
+
     copyLine = copyLine.split(/\W+/gmi).join(',')
     copyLine = copyLine.replace(/\,/gmi, ' ')
-    copyLine = removePhoneNumber(copyLine)
     copyLine = copyLine.replace(/^\s/gmi, '')
-    copyLine = copyLine.replace(/\s$/gmi, '')    
+    copyLine = copyLine.replace(/\s$/gmi, '')
 
     //ignore empty strings
     if (!allowEmpty && isEmpty(copyLine)) continue;
+
+    //ignore empty strings
+    if (copyLine.length < minLengthAllowed) continue;
+
+    //ignore empty strings
+    if (containsFilter !== false && copyLine.indexOf(containsFilter) < 0) continue;
+
     filteredTokens.push(copyLine);
   }
   return filteredTokens;
 }
 
-//https://regex101.com/r/dUAl4h/2
+function removeContact(str) {
+  str = removeUrl(str)
+  str = removeEmail(str)
+  str = removePhoneNumber(str)
+  return str
+}
+
+function removeEmail(str) {
+  return str.replace(/(([^<>()\[\]\.,;:\s@\"]+(\.[^<>()\[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})/gmi, '')
+}
+
+function removeUrl(str) {
+  return str.replace(/https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gmi, '')
+}
+
+//https://regex101.com/r/dUAl4h/4
 function removePhoneNumber(str) {
-  return str.replace(/(\d{9,12}|(\d\s)?\d{3,4}\s\d{3}\s\d{4})/gmi, '')
+  return str.replace(/(([+\s]?\d{1,3})?([\s\d\(-\.])?\d{1,4}([\s\d\(-\.]{1,2})?\d{1,4}([\s\d\(-\.])?\d{1,4}([\s\d\(-\.])?\d{1,4})/gmi, '')
 }
 
 function isEmpty(str) {
