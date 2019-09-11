@@ -15,7 +15,8 @@ program
   .option("--no-accent", "remove accent")
   .option("--no-emoji", "remove emoji")
   .action(function(dir, options) {
-    main(dir, options);
+    crossPath = dir.replace('\\','/')
+    main(crossPath, options);
   });
 program.parse(process.argv);
 
