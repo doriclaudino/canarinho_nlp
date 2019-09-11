@@ -111,13 +111,22 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     if (!allowDoubleSpaces)
       copyLine = removeDoubleSpaces(copyLine)
 
+    copyLine = copyLine.split(/\W+/gmi).join(',')
+    copyLine = copyLine.replace(/\,/gmi, ' ')
+    copyLine = removePhoneNumber(copyLine)
+    copyLine = copyLine.replace(/^\s/gmi, '')
+    copyLine = copyLine.replace(/\s$/gmi, '')    
+
     //ignore empty strings
     if (!allowEmpty && isEmpty(copyLine)) continue;
-
-
     filteredTokens.push(copyLine);
   }
   return filteredTokens;
+}
+
+//https://regex101.com/r/dUAl4h/1
+function removePhoneNumber(str) {
+  return str.replace(/(\d{9,12}|\d{3,4}\s\d{3}\s\d{4}|\d\s\d{3,4}\s\d{3}\s\d{4})/gmi, '')
 }
 
 function isEmpty(str) {
