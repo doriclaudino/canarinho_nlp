@@ -10,6 +10,7 @@ const latinMap = require("./latinMap");
 program
   .version(pjson.version)
   .command("import <dir>")
+  .option("--saveoriginal", "analyses clean data, BUT save original texts", false)
   .option("--minlength <length>", "skip strings with length less than <min>", 4)
   .option("-s, --suffix <suffix>", "suffix to save", ".clean.json")
   .option("--tfidf", "show tfidf frequency analysis", false)
@@ -39,14 +40,21 @@ function main(path, options) {
       empty,
       contact,
       minlength,
-      containsfilter
+      containsfilter,
+      saveoriginal
   } = options;
   const saveFileName = path + suffix;
 
   let doc = readFile(path);
   let lines = breakInLines(doc);
-  let cleanedSentences = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter);
-  saveToDisk(cleanedSentences, saveFileName);
+  let SentencesObject = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter);
+
+  let cleanedSentences = SentencesObject.map(e => e.cleaned)
+
+  if (saveoriginal) {
+    let rawSentences = SentencesObject.map(e => removeLineDataHeader(e.raw))
+    saveToDisk(rawSentences, saveFileName);
+  }
 
   if (tfidf) {
     wordFrequency(cleanedSentences);
@@ -108,7 +116,7 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     copyLine = removeInitialBreakLine(copyLine);
 
     //remove dups/spamm
-    if (!allowDuplicates && filteredTokens.find(e => e === copyLine)) continue;
+    if (!allowDuplicates && filteredTokens.find(e => e.cleaned === copyLine)) continue;
 
     if (!allowAccent) copyLine = removeAccent(copyLine);
     if (!allowEmoji) copyLine = removeEmoji(copyLine);
@@ -137,7 +145,10 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     //ignore empty strings
     if (containsFilter !== false && copyLine.indexOf(containsFilter) < 0) continue;
 
-    filteredTokens.push(copyLine);
+    filteredTokens.push({
+      cleaned: copyLine,
+      raw: line
+    });
   }
   return filteredTokens;
 }
@@ -215,12 +226,3 @@ function printWordFrequency() {
     console.log(item.term + ": " + item.tfidf);
   });
 }
-
-/**
- * todo
- *
- * use params instead always ask user
- * check tfidf cleaning rules
- * remove accents from portuguese or lemmatize
- *
- */
