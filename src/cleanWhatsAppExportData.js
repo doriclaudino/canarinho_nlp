@@ -193,7 +193,7 @@ function isEmpty(str) {
 }
 
 function removeLineDataHeader(str) {
-  return str.replace(/.{1,10}\:\d{1,2}\s.{1,50}\:\s/gim, "");
+  return str.replace(/.{1,10}\:\d{1,2}[\s\:].{1,50}\:\s/gim, "");
 }
 
 function removeInitialBreakLine(str) {
