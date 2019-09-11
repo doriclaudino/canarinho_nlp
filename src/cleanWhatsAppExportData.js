@@ -21,7 +21,8 @@ program
   .option("--duplicates", "allow duplicates texts", false)
   .option("--empty", "allow empty texts", false)
   .option("--contact", "allow contacts like email and phonenumbers on texts", false)
-  .option("--containsfilter <string>", "filter lines", false)
+  .option("--containsfilter <string>", "must contains <regex>", undefined)
+  .option("--ignorefilter <string>", "must not contains <regex>", undefined)
   .action(function (dir, options) {
     crossPath = dir.replace('\\', '/')
     main(crossPath, options);
@@ -41,13 +42,14 @@ function main(path, options) {
       contact,
       minlength,
       containsfilter,
+      ignorefilter,
       saveoriginal
   } = options;
   const saveFileName = path + suffix;
 
   let doc = readFile(path);
   let lines = breakInLines(doc);
-  let SentencesObject = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter);
+  let SentencesObject = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter, ignorefilter);
 
   let cleanedSentences = SentencesObject.map(e => e.cleaned)
 
@@ -68,12 +70,12 @@ function readFile(path) {
 
 function breakInLines(document) {
   tokenizer = new natural.RegexpTokenizer({
-    pattern: /^\d{1,2}\/\d{1,2}\/\d{1,2}\,\s/gim
+    pattern: /^\d{1,2}\/\d{1,2}\/\d{1,4}[\,\d]\s/gim
   });
   return tokenizer.tokenize(document);
 }
 
-function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoubleSpaces, allowDuplicates, allowEmpty, allowContact, minLengthAllowed, containsFilter) {
+function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoubleSpaces, allowDuplicates, allowEmpty, allowContact, minLengthAllowed, containsFilter, ignoreFilter) {
   console.log(`
   allowAccent: ${allowAccent}, 
   allowEmoji: ${allowEmoji}, 
@@ -84,6 +86,7 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
   allowContact: ${allowContact},
   minLengthAllowed: ${minLengthAllowed},
   containsFilter: ${containsFilter},
+  ignoreFilter: ${ignoreFilter},
   `)
   if (!sentences.length) return sentences;
 
@@ -115,9 +118,6 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     copyLine = removeEndLineBreakLine(copyLine);
     copyLine = removeInitialBreakLine(copyLine);
 
-    //remove dups/spamm
-    if (!allowDuplicates && filteredTokens.find(e => e.cleaned === copyLine)) continue;
-
     if (!allowAccent) copyLine = removeAccent(copyLine);
     if (!allowEmoji) copyLine = removeEmoji(copyLine);
 
@@ -142,8 +142,15 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     //ignore empty strings
     if (copyLine.length < minLengthAllowed) continue;
 
-    //ignore empty strings
-    if (containsFilter !== false && copyLine.indexOf(containsFilter) < 0) continue;
+    //line must contain
+    if (containsFilter !== undefined && !new RegExp(containsFilter, 'gmi').test(copyLine)) continue;
+
+    //skip line if contains
+    if (ignoreFilter !== undefined && new RegExp(ignoreFilter, 'gmi').test(copyLine)) continue;
+
+
+    //remove dups/spamm
+    if (!allowDuplicates && filteredTokens.find(e => e.cleaned === copyLine)) continue;
 
     filteredTokens.push({
       cleaned: copyLine,
