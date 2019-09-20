@@ -18,6 +18,7 @@ program
   .option("--tfidf", "show tfidf frequency analysis", false)
   .option("--accent", "allow accents", false)
   .option("--emoji", "allow emojis", false)
+  .option("--alfa", "allow alfanumerics only", true)
   .option("--no-lowercase", "transform to lower or maintain the case-sensitive", true)
   .option("--doublespaces", "allow doublespaces", false)
   .option("--duplicates", "allow duplicates texts", false)
@@ -46,13 +47,14 @@ function main(dir, options) {
       containsfilter,
       ignorefilter,
       saveoriginal,
-      saveas
+      saveas,
+      alfa
   } = options;
   const saveFileName = dir + suffix;
 
   let doc = readFile(dir);
   let lines = breakInLines(doc);
-  let SentencesObject = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter, ignorefilter);
+  let SentencesObject = cleanData(lines, accent, emoji, lowercase, doublespaces, duplicates, empty, contact, minlength, containsfilter, ignorefilter, alfa);
 
   let cleanedSentences = SentencesObject.map(e => e.cleaned)
   let toSave = cleanedSentences
@@ -83,7 +85,7 @@ function breakInLines(document) {
   return tokenizer.tokenize(document);
 }
 
-function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoubleSpaces, allowDuplicates, allowEmpty, allowContact, minLengthAllowed, containsFilter, ignoreFilter) {
+function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoubleSpaces, allowDuplicates, allowEmpty, allowContact, minLengthAllowed, containsFilter, ignoreFilter, alfaOnly) {
   console.log(`
   allowAccent: ${allowAccent}, 
   allowEmoji: ${allowEmoji}, 
@@ -95,6 +97,7 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
   minLengthAllowed: ${minLengthAllowed},
   containsFilter: ${containsFilter},
   ignoreFilter: ${ignoreFilter},
+  alfaOnly: ${alfaOnly},
   `)
   if (!sentences.length) return sentences;
 
@@ -132,17 +135,17 @@ function cleanData(sentences = [], allowAccent, allowEmoji, lowerCase, allowDoub
     //replace enter
     copyLine = copyLine.replace(/\n/gmi, '⏎');
 
+    if (!allowContact)
+      copyLine = removeContact(copyLine)
+
+      if (alfaOnly)
+      copyLine = copyLine.replace(/\W/gmi, ' ')
+
     //remove double space
     if (!allowDoubleSpaces)
       copyLine = removeDoubleSpaces(copyLine)
 
-    if (!allowContact)
-      copyLine = removeContact(copyLine)
 
-    copyLine = copyLine.split(/\W+/gmi).join(',')
-    copyLine = copyLine.replace(/\,/gmi, ' ')
-    copyLine = copyLine.replace(/^\s/gmi, '')
-    copyLine = copyLine.replace(/\s$/gmi, '')
 
     //ignore empty strings
     if (!allowEmpty && isEmpty(copyLine)) continue;
@@ -206,7 +209,7 @@ function removeEndLineBreakLine(str) {
 
 function removeDoubleSpaces(str) {
   const regex = /\s{2,}/gmi;
-  return str.replace(regex, '')
+  return str.replace(regex, ' ')
 }
 
 function removeEmoji(str) {
