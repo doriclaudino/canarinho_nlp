@@ -4,14 +4,20 @@
   "description": "nlp for canarinho app",
   "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack"
   },
   "author": "doriclaudino",
   "license": "ISC",
   "dependencies": {
     "commander": "^3.0.1",
+    "jaro-winkler": "^0.2.8",
     "natural": "^0.6.3",
     "path": "^0.12.7",
     "stopword": "^0.3.3"
+  },
+  "devDependencies": {
+    "webpack": "^4.41.0",
+    "webpack-cli": "^3.3.9"
   }
 }

@@ -62,3 +62,4 @@ typings/
 src/package-lock.json
 package-lock.json
 yarn.lock
+dist/main.js
