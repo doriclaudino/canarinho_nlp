@@ -522,7 +522,7 @@ function comparePhraseDistance() {
 
     controlFile = load(true)
     saveToPost = {}
-    flatMessages = {}
+    flatMessages24h = {}
     flatParticipants = {}
 
     //filter 24h messages only
@@ -536,12 +536,14 @@ function comparePhraseDistance() {
 
         //flat messages
         Object.keys(controlFile.groups[groupKey].msgs).forEach(msgKey => {
-            if (controlFile.groups[groupKey].msgs[msgKey].t > yesterday)
-                flatMessages[msgKey] = controlFile.groups[groupKey].msgs[msgKey]
+            if (controlFile.groups[groupKey].msgs[msgKey].t > yesterday) {
+                flatMessages24h[msgKey] = controlFile.groups[groupKey].msgs[msgKey]
+                flatMessages24h[msgKey].state = controlFile.groups[groupKey].state.abbrev
+            }
         })
     })
 
-    Object.entries(flatMessages).forEach(keyAndValue => {
+    Object.entries(flatMessages24h).forEach(keyAndValue => {
         messageKey = keyAndValue[0]
         messageObject = keyAndValue[1]
         currentId = messageKey
@@ -555,7 +557,7 @@ function comparePhraseDistance() {
             saveToPost[currentId].jaroWrinker = {}
         }
 
-        Object.entries(flatMessages).forEach(keyAndValue => {
+        Object.entries(flatMessages24h).forEach(keyAndValue => {
             messageKey = keyAndValue[0]
             messageObject = keyAndValue[1]
             jaroSimilarity = JaroWrinker(currentObject.text, messageObject.text)
@@ -567,17 +569,102 @@ function comparePhraseDistance() {
             if (currentObject.senderId !== messageObject.senderId && jaroSimilarity > rules.differentUser.JaroWrinker)
                 saveToPost[currentId].jaroWrinker[messageKey] = jaroSimilarity
         })
-
     })
 
     controlFile = {
         ...controlFile,
-        last24hWithoutSpamm: saveToPost,
+        last24hWithoutSpamm: {
+            ...controlFile.last24hWithoutSpamm,
+            ...saveToPost
+        },
         last24hWithoutSpammLength: Object.keys(saveToPost).length,
-        flat24hMessages: flatMessages,
-        flat24hMessagesLength: Object.keys(flatMessages).length,
-        flatParticipants: flatParticipants,
+        flatMessages24h: {
+            ...controlFile.flatMessages24h,
+            ...flatMessages24h
+        },
+        flatMessages24hLength: Object.keys(flatMessages24h).length,
+        flatParticipants,
         flatParticipantsLength: Object.keys(flatParticipants).length
     }
     save(controlFile)
+}
+
+
+function GroupsByState(groupList) {
+    return Object.entries(groupList).reduce((prev, curr) => {
+        prev[curr[1].state.abbrev] ? prev[curr[1].state.abbrev].push(curr[1].id) : prev[curr[1].state.abbrev] = [curr[1].id]
+        return prev
+    }, {})
+}
+
+/** just wait :D */
+function wait(time) {
+    return new Promise(resolve => {
+        timeout = setTimeout(() => {
+            resolve();
+        }, time);
+    });
+}
+
+/**
+ * loop on messages
+ * classify using wit.ai every 1.5sec
+ */
+async function sendMessages() {
+    controlFile = load(true)
+    msgsKey = Object.keys(controlFile.last24hWithoutSpamm)
+    if (!msgsKey.length) return false;
+
+    targetGroups = getTargetGroups()
+    groupsByState = GroupsByState(targetGroups)
+
+    updatedGroupData = getChatsHtmlAndBasicInformation()
+    console.log(updatedGroupData)
+    for (let index = 0; index < msgsKey.length; index++) {
+        const key = msgsKey[index];
+        message = controlFile.last24hWithoutSpamm[key]
+        groupsToSend = groupsByState[message.state]
+
+        for (const arrayIndex in groupsToSend) {
+            console.log(`abrindo grupo ${groupsToSend[arrayIndex]} mensage: ${message.text}`)
+            html = updatedGroupData[groupsToSend[arrayIndex]].htmlElement
+            group = updatedGroupData[groupsToSend[arrayIndex]]
+            console.log(group)
+
+            //manipular o wit.ai aki
+            //esperar o 1sec+ para proxima call
+            sent = await sendOneMessage(html, message.text)
+
+            if (sent) {
+                await wait(400)
+                console.log(`How we can confirm if was sent or not?`)
+            }
+
+            console.log(`mensage: ${message.text} sent:${sent}`)
+            await wait(1500)
+        }
+    }
+}
+
+
+async function sendOneMessage(chatHtml, message) {
+    selected = await selectChat(chatHtml)
+    let promise = new Promise((resolve, reject) => {
+        try {
+            if (!selected)
+                throw (`Chat not open!`)
+            messageBox = document.querySelectorAll("[contenteditable='true']")[0];
+            messageBox.innerHTML = message.replace(/  /gm, '');
+            event = document.createEvent("UIEvents");
+            event.initUIEvent("input", true, true, window, 1);
+            messageBox.dispatchEvent(event);
+
+            eventFire(document.querySelector('span[data-icon="send"]'), 'click');
+            //how to confirm if is sent or not?
+            resolve(true)
+        } catch (error) {
+            reject(error)
+        }
+    });
+    return promise;
 }
