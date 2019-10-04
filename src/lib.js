@@ -33,7 +33,7 @@ function findReactComponent(htmlNodeElement) {
 
 
 // Dispath an event (of click, por instance)
-function eventFire(el, etype) {
+export function eventFire(el, etype) {
     var evt = document.createEvent("MouseEvents");
     evt.initMouseEvent(etype, true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
     el.dispatchEvent(evt);
@@ -203,7 +203,7 @@ const openGroupMenuOptions = async () =>
         maxTimeout: 400
     });
 
-const selectChat = async (chat) =>
+export const selectChat = async (chat) =>
     retry(async (bail, num) => {
         console.log(chat, num)
         eventFire(chat.firstChild.firstChild.firstChild, 'mousedown');
@@ -379,7 +379,7 @@ export async function getGroupsBasicData(groupKeysToRead = [], getLinks = false)
             lastMessageId = rawData.msgs._last.id.id
         }
         groupData[rawData.id.user] = {
-            //htmlElement,
+            htmlElement,
             formattedTitle: rawData.formattedTitle,
             desc: rawData.groupMetadata.desc,
             groupInviteLink: rawData.groupMetadata.groupInviteLink,
@@ -436,3 +436,90 @@ export const requestWit = async (baseUrl, token, message) =>
         minTimeout: 1100,
         maxTimeout: 1500,
     });
+
+
+//US numbers we format as national, others country is international format
+//on exception return the input
+function formatPhoneNumber(number) {
+    return '+' + number.replace(/[^\d]/gmi, '')
+}
+
+//format phone number if exist
+//or append senderId on boldtext
+function addMessagePhoneNumber(object) {
+    object.boldtext = object.text
+    //phone number        
+    if (!object.wit.entities.phone_number) {
+        //no phone number on message
+        let formattedPhoneNumber = formatPhoneNumber(object.senderId)
+        let newline = '\n'
+        object.boldtext = `${object.boldtext}${newline}*Contato: ${formattedPhoneNumber}*`
+    } else {
+        //varios phone number add *phone* on them
+        object.wit.entities.phone_number.forEach(phone => {
+            let number = phone.value
+            let formattedPhoneNumber = formatPhoneNumber(number)
+            object.boldtext = object.boldtext.replace(number, `*${formattedPhoneNumber}*`)
+        })
+    }
+    return object
+}
+
+//add asterisk around entities
+//skip intent and phone_number
+function addBoldAroundEntities(object) {
+    //others keys like location
+    let restKeys = Object.keys(object.wit.entities).filter(key => key !== 'intent' && key !== 'phone_number')
+    restKeys.forEach(key => {
+        let entityOccurences = object.wit.entities[key]
+        entityOccurences.forEach(occurence => {
+            let value = occurence.value
+            object.boldtext = object.boldtext.replace(value, `*${value}*`)
+        })
+    })
+    return object
+}
+
+//add boldText on messages with intent
+export function boldMessagesBeforeSend(messagesToBold) {
+    let processedOnWit = Object.keys(messagesToBold).filter(key => messagesToBold[key].wit && messagesToBold[key].wit.entities && messagesToBold[key].wit.entities.intent)
+    processedOnWit.forEach(key => {
+        let object = messagesToBold[key]
+        object.boldtext = object.text
+        object = addMessagePhoneNumber(object)
+        object = addBoldAroundEntities(object)
+        messagesToBold[key] = object
+    })
+    return messagesToBold
+}
+
+
+export function GroupsByState(groupList) {
+    return Object.entries(groupList).reduce((prev, curr) => {
+        prev[curr[1].state] ? prev[curr[1].state].push(curr[0]) : prev[curr[1].state] = [curr[0]]
+        return prev
+    }, {})
+}
+
+//we can improve with retry
+export async function sendOneMessage(chatHtml, message) {
+    let selected = await selectChat(chatHtml)
+    let promise = new Promise((resolve, reject) => {
+        try {
+            if (!selected)
+                throw (`Chat not open!`)
+            let messageBox = document.querySelectorAll("[contenteditable='true']")[0];
+            messageBox.innerHTML = message.replace(/  /gm, '');
+            let event = document.createEvent("UIEvents");
+            event.initUIEvent("input", true, true, window, 1);
+            messageBox.dispatchEvent(event);
+
+            eventFire(document.querySelector('span[data-icon="send"]'), 'click');
+            //how to confirm if is sent or not?
+            resolve(true)
+        } catch (error) {
+            reject(error)
+        }
+    });
+    return promise;
+}

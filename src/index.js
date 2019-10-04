@@ -5,7 +5,10 @@ import {
     saveWhatsAppGroups,
     saveMessages,
     retrieveWhatsMessages,
-    requestWit
+    requestWit,
+    boldMessagesBeforeSend,
+    sendOneMessage,
+    GroupsByState
 } from "./lib";
 import JaroWrinker from 'jaro-winkler';
 
@@ -38,8 +41,16 @@ async function readMessages() {
         else if (sourceGroupKeys.includes(key))
             browserGroups[key].type = AllGroups[key].type
     }
-
+    
     console.log(browserGroups)
+
+    //delete htmlElement 
+    Object.keys(browserGroups).forEach(key=>{
+        let copy = {...browserGroups[key]}
+        delete copy['htmlElement']
+        browserGroups[key] = copy
+    })
+
     saveParticipantsList(browserParticipants)
     saveWhatsAppGroups(browserGroups)
     saveMessages(browserMessages)
@@ -125,19 +136,78 @@ async function sendMessages() {
         noSpamm
     })
 
+    /**
+     * maybe here we check if was processed/send before and skip
+     * after 24h we don't compare as spamm anymore in other words: everything equals in 24h windows is an spamm
+     * 
+     * if some text on noSpamm was sent we skip
+     * if some text as jaroSimilarity was sent we skip
+     */
+
+
+
     let noSpammKeys = Object.keys(noSpamm)
     let witClassificated = {}
     for (let index = 0; index < noSpammKeys.length; index++) {
         const key = noSpammKeys[index];
         let msg = noSpamm[key]
+
+        //remove tokens
         msg.wit = await requestWit('https://api.wit.ai/message?v=20191001&q=', 'LYLIAYXEP6IRP6MOH7O7222VI4LVVAXG', msg.text)
         witClassificated[key] = msg
     }
     console.log({
         witClassificated
     })
+
+    let boldedMessagesCollection = boldMessagesBeforeSend(witClassificated)
+    console.log({
+        boldedMessagesCollection
+    })
+
+    //only items with bold text
+    let boldKeys = Object.keys(boldedMessagesCollection).filter(key=>boldedMessagesCollection[key].boldtext)
+    
+    //target groups to send
+    let targetGroups = Object.keys(browserGroups).filter(key=>targetGroupKeys.includes(key)).map(key=>browserGroups[key])
+
+    //get groups by states ready
+    let groupsByState = GroupsByState(targetGroups)
+    for (let index = 0; index < boldKeys.length; index++) {
+        const key = boldKeys[index];
+        let msg = boldedMessagesCollection[key]
+
+        //select groups based on message state
+        let groupsToSend = groupsByState[msg.state]
+
+        //sending message to each state
+        //we can make a queue with, groupname, message
+        await groupsToSend.forEach(async groupId => {
+            let group = targetGroups[groupId]
+            console.log(group)
+            console.log(`abrindo grupo ${group.formattedTitle} mensage: ${msg.text}`)
+            let sent = await sendOneMessage(group.htmlElement, msg.boldtext)
+            console.log('sent',sent)
+        });
+    }
+
+    //delete htmlElement 
+    Object.keys(browserGroups).forEach(key=>{
+        let copy = {...browserGroups[key]}
+        delete copy['htmlElement']
+        browserGroups[key] = copy
+    })
+
+
+    /***
+     * we can mark messages with processedflag
+     * and next loop always get 24h messages without flag
+     */
+    saveMessages(boldedMessagesCollection)
+
     saveWhatsAppGroups(browserGroups)
 }
+
 
 let zapbot = window.zapBot
 window.zapBot = {
