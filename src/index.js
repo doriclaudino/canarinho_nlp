@@ -16,7 +16,33 @@ import {
 } from "./lib";
 import JaroWrinker from 'jaro-winkler';
 
+async function canPerformAction(actionType = 'reader') {
+    let currentUserKey = Object.keys(findCurrentUser())[0]
+    if (!currentUserKey)
+        throw new Error(`Can't confirm currentUser on the browser`)
+
+    let robots = await retrieveRobots()
+
+    if (!robots)
+        throw new Error(`OH-OH there's no robots available, start with zapBot.updateCurrentUser()`)
+
+
+    let userExistOnFirebase = Object.keys(robots).find(key => key === currentUserKey)
+    if (!userExistOnFirebase)
+        throw new Error(`OH-OH user not found on database, zapBot.updateCurrentUser()`)
+
+    let foundUserWithType = Object.keys(robots).find(key => robots[key].type && robots[key].type === actionType)
+    if (!foundUserWithType)
+        throw new Error(`Theres no user with ${actionType} type`)
+
+    let currentUserCanPerform = Object.keys(robots).find(key => key === currentUserKey && robots[key].type && robots[key].type === actionType)
+    if (!currentUserCanPerform)
+        throw new Error(`Current user ${currentUserKey} can't perform ${actionType} type`)
+    return true
+}
+
 async function readMessages() {
+    await canPerformAction('reader')
     let AllGroups = await retrieveWhatsAppsGroups() || {}
     let sourceGroupKeys = Object.keys(AllGroups).filter(key => AllGroups[key] && AllGroups[key].type === 'source') || []
     let ignoreGroupKeys = Object.keys(AllGroups).filter(key => AllGroups[key] && AllGroups[key].type === 'target') || []
@@ -64,6 +90,7 @@ async function readMessages() {
 
 
 async function sendMessages() {
+    await canPerformAction('writer')
     let AllGroups = await retrieveWhatsAppsGroups() || {}
     let targetGroupKeys = Object.keys(AllGroups).filter(key => AllGroups[key] && AllGroups[key].type === 'target') || []
     let ignoreGroupKeys = Object.keys(AllGroups).filter(key => AllGroups[key] && AllGroups[key].type === 'source') || []
