@@ -420,3 +420,19 @@ const loadMessagesUntilCondition = async (compareDate) =>
         maxTimeout: 1000,
         retries: 20
     });
+
+export const requestWit = async (baseUrl, token, message) =>
+    retry(async (bail, num) => {
+        console.log(`requestWit ${message} num${num}`)
+        let encodedMessage = encodeURIComponent(message)
+        let res = await fetch(`${baseUrl}${encodedMessage}`, {
+            method: 'get',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        return res.json()
+    }, {
+        minTimeout: 1100,
+        maxTimeout: 1500,
+    });

@@ -4,8 +4,10 @@ import {
     saveParticipantsList,
     saveWhatsAppGroups,
     saveMessages,
-    retrieveWhatsMessages
+    retrieveWhatsMessages,
+    requestWit
 } from "./lib";
+import JaroWrinker from 'jaro-winkler';
 
 async function readMessages() {
     let AllGroups = await retrieveWhatsAppsGroups() || {}
@@ -73,9 +75,10 @@ async function sendMessages() {
     }
 
     let AllMessages = await retrieveWhatsMessages()
-    console.log({
-        AllMessages
-    })
+
+    //filter 24h messages only
+    let yesterday = new Date().getTime() / 1000 - 24 * 60 * 60
+    let msgsKeys = Object.keys(AllMessages).filter(key => AllMessages[key].t > yesterday)
     //link state to messages
     for (let index = 0; index < msgsKeys.length; index++) {
         const key = msgsKeys[index];
@@ -83,11 +86,56 @@ async function sendMessages() {
         msg.state = AllGroups[msg.g].state
         AllMessages[key] = msg
     }
+
+    let JaroWrinker_sameUser = .9
+    let JaroWrinker_differentUser = .8
+
+    let noSpamm = {}
+    for (let index = 0; index < msgsKeys.length; index++) {
+        const key = msgsKeys[index];
+        let msg = AllMessages[key]
+
+        //the key is founded matching another message on noSpamm collection
+        if (Object.keys(noSpamm).find(tempKey => noSpamm[tempKey] && noSpamm[tempKey].jaroWrinker && noSpamm[tempKey].jaroWrinker[key])) continue;
+
+        //add new item on collection
+        if (!noSpamm[key]) {
+            noSpamm[key] = msg
+            noSpamm[key].jaroWrinker = {}
+        }
+
+        msg.state = AllGroups[msg.g].state
+        AllMessages[key] = msg
+
+        for (let index2 = 0; index2 < msgsKeys.length; index2++) {
+            const key2 = msgsKeys[index2];
+            let msg2 = AllMessages[key2]
+
+            if (key2 === key) continue
+            let jaroSimilarity = JaroWrinker(msg.text, msg2.text)
+
+            //save jaroSimilatiry on object
+            if (msg2.senderId === msg.senderId && jaroSimilarity > JaroWrinker_sameUser)
+                noSpamm[key].jaroWrinker[key2] = jaroSimilarity
+            if (msg2.senderId !== msg.senderId && jaroSimilarity > JaroWrinker_differentUser)
+                noSpamm[key].jaroWrinker[key2] = jaroSimilarity
+        }
+    }
     console.log({
-        AllMessages
+        noSpamm
     })
 
-    console.log(browserGroups)
+    let noSpammKeys = Object.keys(noSpamm)
+    let witClassificated = {}
+    for (let index = 0; index < noSpammKeys.length; index++) {
+        const key = noSpammKeys[index];
+        let msg = noSpamm[key]
+        msg.wit = await requestWit('https://api.wit.ai/message?v=20191001&q=', 'LYLIAYXEP6IRP6MOH7O7222VI4LVVAXG', msg.text)
+        witClassificated[key] = msg
+    }
+    console.log({
+        witClassificated
+    })
     saveWhatsAppGroups(browserGroups)
 }
 
