@@ -3,7 +3,8 @@ import {
     getGroupsBasicData,
     saveParticipantsList,
     saveWhatsAppGroups,
-    saveMessages
+    saveMessages,
+    retrieveWhatsMessages
 } from "./lib";
 
 async function readMessages() {
@@ -28,11 +29,14 @@ async function readMessages() {
     let browserGroupsKeys = Object.keys(browserGroups)
     for (let index = 0; index < browserGroupsKeys.length; index++) {
         const key = browserGroupsKeys[index];
+        if (browserGroups[key] && AllGroups[key] && AllGroups[key].state)
+            browserGroups[key].state = AllGroups[key].state
         if (ignoreGroupKeys.includes(key))
             delete browserGroups[key]
         else if (sourceGroupKeys.includes(key))
             browserGroups[key].type = AllGroups[key].type
     }
+
     console.log(browserGroups)
     saveParticipantsList(browserParticipants)
     saveWhatsAppGroups(browserGroups)
@@ -60,11 +64,29 @@ async function sendMessages() {
     let browserGroupsKeys = Object.keys(browserGroups)
     for (let index = 0; index < browserGroupsKeys.length; index++) {
         const key = browserGroupsKeys[index];
+        if (browserGroups[key] && AllGroups[key] && AllGroups[key].state)
+            browserGroups[key].state = AllGroups[key].state
         if (ignoreGroupKeys.includes(key))
             delete browserGroups[key]
         else if (targetGroupKeys.includes(key))
             browserGroups[key].type = AllGroups[key].type
     }
+
+    let AllMessages = await retrieveWhatsMessages()
+    console.log({
+        AllMessages
+    })
+    //link state to messages
+    for (let index = 0; index < msgsKeys.length; index++) {
+        const key = msgsKeys[index];
+        let msg = AllMessages[key]
+        msg.state = AllGroups[msg.g].state
+        AllMessages[key] = msg
+    }
+    console.log({
+        AllMessages
+    })
+
     console.log(browserGroups)
     saveWhatsAppGroups(browserGroups)
 }

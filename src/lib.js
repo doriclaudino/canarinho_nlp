@@ -271,6 +271,8 @@ const getOnFirebase = async (collection) =>
 
 export const retrieveWhatsAppsGroups = () => getOnFirebase('whatsAppGroups')
 
+export const retrieveWhatsMessages = () => getOnFirebase('messages')
+
 /**
  * scroll Y pixels to top
  */
