@@ -370,7 +370,8 @@ export async function getGroupsBasicData(groupKeysToRead = [], getLinks = false)
                 messages[msg.id.id] = {
                     t: msg.t,
                     senderId: msg.sender.user,
-                    text: msg.text
+                    text: msg.text,
+                    g: rawData.id.user
                 }
             }
             lastMessageId = rawData.msgs._last.id.id
