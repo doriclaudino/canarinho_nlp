@@ -110,8 +110,10 @@ function passExtendedCleanRules(str) {
 }
 
 
-const saveOnFirebase = async (collection, data) =>
+const saveOnFirebase = async (collection, data, pathTransform = true) =>
     retry(async (bail, num) => {
+        if (pathTransform)
+            data = pathAtributes(data)
         var full_url_data_json = `${_firebase_base_url}${collection}.json`
         const res = await fetch(full_url_data_json, {
             method: 'PATCH',
@@ -217,37 +219,86 @@ export const selectChat = async (chat) =>
         maxTimeout: 400
     });
 
-export function saveMessages(dataToSave, saveOnStorage = true) {
+export function saveMessages(dataToSave, pathTransform = true, saveOnStorage = true) {
     let collectionName = 'messages'
     if (saveOnStorage) {
         let loadedLocalData = load()
         loadedLocalData[collectionName] = dataToSave
         save(loadedLocalData)
     }
-    return saveOnFirebase(collectionName, dataToSave)
+    return saveOnFirebase(collectionName, dataToSave, pathTransform)
 }
 
-export function saveWhatsAppGroups(dataToSave, saveOnStorage = true) {
+export function saveWhatsAppGroups(dataToSave, pathTransform, saveOnStorage = true) {
     let collectionName = 'whatsAppGroups'
     if (saveOnStorage) {
         let loadedLocalData = load()
         loadedLocalData[collectionName] = dataToSave
         save(loadedLocalData)
     }
-    return saveOnFirebase(collectionName, dataToSave)
+    return saveOnFirebase(collectionName, dataToSave, pathTransform)
 }
 
-export function saveParticipantsList(dataToSave, saveOnStorage = true) {
+export function saveParticipantsList(dataToSave, pathTransform, saveOnStorage = true) {
     let collectionName = 'participants'
     if (saveOnStorage) {
         let loadedLocalData = load()
         loadedLocalData[collectionName] = dataToSave
         save(loadedLocalData)
     }
-    return saveOnFirebase(collectionName, dataToSave)
+    return saveOnFirebase(collectionName, dataToSave, pathTransform)
+}
+
+export function saveRobots(dataToSave, pathTransform, saveOnStorage = true) {
+    let collectionName = 'robots'
+    if (saveOnStorage) {
+        let loadedLocalData = load()
+        loadedLocalData[collectionName] = dataToSave
+        save(loadedLocalData)
+    }
+    return saveOnFirebase(collectionName, dataToSave, pathTransform)
+}
+
+export function updateCurrentUser() {
+    let user = findCurrentUser()
+    return saveRobots(user)
 }
 
 
+export function findCurrentUser() {
+    let chats = document.querySelectorAll('div.X7YrQ')
+    let executionerObject = {}
+
+    for (let index = 0; index < chats.length; index++) {
+        const chat = chats[index];
+        let reactObject = findReactComponent(chat)
+        let reactData = reactObject.props.data.data
+        if (reactData.isUser) continue
+        let found = reactData.groupMetadata.participants.models.map(e => e.contact).find(contact => contact.isMe)
+        if (found) {
+            executionerObject[found.id.user] = {
+                displayName: found.displayName,
+                formattedUser: found.formattedUser,
+                img: found.profilePicThumb ? found.profilePicThumb.eurl : undefined,
+            }
+        }
+        break;
+    }
+    return executionerObject
+}
+
+function pathAtributes(object, _key = '', paths = {}) {
+    if (typeof object !== 'object') return [_key, object]
+    let path = ''
+    let keys = Object.getOwnPropertyNames(object)
+    for (const key in keys) {
+        path = _key.length ? _key + '/' + keys[key] : keys[key]
+        let values = pathAtributes(object[keys[key]], path, paths)
+        if (values[0])
+            paths[values[0]] = values[1]
+    }
+    return paths
+}
 
 function reachEncryptionNotification(msgs) {
     return msgs.find(e => e.type === "e2e_notification" && e.subtype === "encrypt")
@@ -272,6 +323,8 @@ const getOnFirebase = async (collection) =>
 export const retrieveWhatsAppsGroups = () => getOnFirebase('whatsAppGroups')
 
 export const retrieveWhatsMessages = () => getOnFirebase('messages')
+
+export const retrieveRobots = () => getOnFirebase('robots')
 
 /**
  * scroll Y pixels to top

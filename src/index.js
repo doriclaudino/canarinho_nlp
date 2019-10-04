@@ -8,7 +8,11 @@ import {
     requestWit,
     boldMessagesBeforeSend,
     sendOneMessage,
-    GroupsByState
+    GroupsByState,
+    findCurrentUser,
+    saveRobots,
+    retrieveRobots,
+    updateCurrentUser
 } from "./lib";
 import JaroWrinker from 'jaro-winkler';
 
@@ -41,12 +45,14 @@ async function readMessages() {
         else if (sourceGroupKeys.includes(key))
             browserGroups[key].type = AllGroups[key].type
     }
-    
+
     console.log(browserGroups)
 
     //delete htmlElement 
-    Object.keys(browserGroups).forEach(key=>{
-        let copy = {...browserGroups[key]}
+    Object.keys(browserGroups).forEach(key => {
+        let copy = {
+            ...browserGroups[key]
+        }
         delete copy['htmlElement']
         browserGroups[key] = copy
     })
@@ -166,10 +172,10 @@ async function sendMessages() {
     })
 
     //only items with bold text
-    let boldKeys = Object.keys(boldedMessagesCollection).filter(key=>boldedMessagesCollection[key].boldtext)
-    
+    let boldKeys = Object.keys(boldedMessagesCollection).filter(key => boldedMessagesCollection[key].boldtext)
+
     //target groups to send
-    let targetGroups = Object.keys(browserGroups).filter(key=>targetGroupKeys.includes(key)).map(key=>browserGroups[key])
+    let targetGroups = Object.keys(browserGroups).filter(key => targetGroupKeys.includes(key)).map(key => browserGroups[key])
 
     //get groups by states ready
     let groupsByState = GroupsByState(targetGroups)
@@ -187,13 +193,15 @@ async function sendMessages() {
             console.log(group)
             console.log(`abrindo grupo ${group.formattedTitle} mensage: ${msg.text}`)
             let sent = await sendOneMessage(group.htmlElement, msg.boldtext)
-            console.log('sent',sent)
+            console.log('sent', sent)
         });
     }
 
     //delete htmlElement 
-    Object.keys(browserGroups).forEach(key=>{
-        let copy = {...browserGroups[key]}
+    Object.keys(browserGroups).forEach(key => {
+        let copy = {
+            ...browserGroups[key]
+        }
         delete copy['htmlElement']
         browserGroups[key] = copy
     })
@@ -209,6 +217,8 @@ async function sendMessages() {
 }
 
 
+
+
 let zapbot = window.zapBot
 window.zapBot = {
     ...zapbot,
@@ -216,5 +226,9 @@ window.zapBot = {
     sendMessages,
     retrieveWhatsAppsGroups,
     getGroupsBasicData,
-    saveWhatsAppGroups
+    saveWhatsAppGroups,
+    findCurrentUser,
+    saveRobots,
+    retrieveRobots,
+    updateCurrentUser
 }
