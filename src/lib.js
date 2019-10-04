@@ -1,6 +1,6 @@
 var _firebase_base_url = 'https://whatsappbot-c04b6.firebaseio.com/'
 var _localStorageKey = 'zap_bot_key'
-retry = require('async-retry')
+import * as retry from "async-retry";
 
 var htmlElements = {
     chatList: {
@@ -58,116 +58,6 @@ function getHtmlElement(name) {
         parent = parent.childNodes[pos];
     });
     return parent;
-}
-
-//maybe every 1h?
-export async function getGroupsBasicData(groupKeysToRead = [], getLinks = false) {
-    let html = getHtmlElement('chatList')
-    let total = html.childNodes[0].childElementCount
-    let groupData = {}
-    let participants = {}
-    let messages = {}
-    for (let index = 0; index < total; index++) {
-        let htmlElement = html.childNodes[0].childNodes[index];
-        let reactComponent = findReactComponent(htmlElement);
-        let rawData = null
-
-        try {
-            rawData = reactComponent.props.data.data
-        } catch (error) {
-            continue;
-        }
-        if (!rawData.isGroup) continue;
-
-        if (getLinks) {
-            try {
-                console.log(`abrindo settings de ${rawData.name}`)
-                await openGroupInvitationLinkScreen(htmlElement)
-            } catch (error) {
-                console.log(error)
-            }
-        }
-
-        groupMetadata = rawData.groupMetadata
-        participantGroups = {}
-        participantGroups[rawData.id.user] = true
-        Object.keys(groupMetadata.participants._index).forEach(key => {
-            let participantObject = groupMetadata.participants._index[key]
-            userId = participantObject.id.user
-            name = participantObject.contact.name
-            img = participantObject.contact.profilePicThumb ? participantObject.contact.profilePicThumb.img : undefined
-
-            let mergeGroups = participants[userId] ? participants[userId].groups : {}
-            participants[userId] = {
-                name,
-                img,
-                groups: {
-                    ...mergeGroups,
-                    ...participantGroups
-                }
-            }
-        })
-
-        let minTimestamp = undefined
-        let maxTimestamp = undefined
-        let lastMessageId = undefined
-        //we allow to read messages from this group
-        if (groupKeysToRead.length && groupKeysToRead.includes(rawData.id.user)) {
-            try {
-                let chatopened = await selectChat(htmlElement)
-                //dois dias atras
-                let diffdays = 2
-                let compareToDate = new Date(new Date().getTime() - (diffdays * 24 * 60 * 60 * 1000)).getTime() / 1000;
-                let chatMsgsHtml = document.querySelector('div._1ays2')
-                let chatMsgsReact = findReactComponent(chatMsgsHtml);
-                let reachCondition = await loadMessagesUntilCondition(() => reachDate(chatMsgsReact.props.msgs, compareToDate) || reachEncryptionNotification(chatMsgsReact.props.msgs))
-            } catch (error) {
-                console.log(error)
-            }
-
-            minTimestamp = Infinity
-            maxTimestamp = 0
-            for (let index = 0; index < rawData.msgs.models.length; index++) {
-                const msg = rawData.msgs.models[index];
-
-                minTimestamp = Math.min(minTimestamp, msg.t)
-                maxTimestamp = Math.max(maxTimestamp, msg.t)
-
-                //memoize
-                if (messages[msg.id.id]) continue
-
-                if (msg.type !== 'chat') continue
-                if (!msg.text) continue
-                if (msg.sender === undefined) continue
-
-                let tempText = removeDoubleSpaces(msg.text)
-                if (!passExtendedCleanRules(tempText)) continue
-                messages[msg.id.id] = {
-                    t: msg.t,
-                    senderId: msg.sender.user,
-                    text: msg.text
-                }
-            }
-            lastMessageId = rawData.msgs._last.id.id
-        }
-        console.log(rawData)
-        groupData[rawData.id.user] = {
-            //htmlElement,
-            formattedTitle: rawData.formattedTitle,
-            desc: rawData.groupMetadata.desc,
-            groupInviteLink: rawData.groupMetadata.groupInviteLink,
-            owner: rawData.groupMetadata.owner.user,
-            restrict: rawData.groupMetadata.restrict,
-            lastMessageId,
-            minTimestamp,
-            maxTimestamp
-        }
-    }
-    return {
-        groups: groupData,
-        participants,
-        messages
-    }
 }
 
 function allowedLength(str) {
@@ -246,12 +136,15 @@ function load() {
     return JSON.parse(localStorage.getItem(_localStorageKey)) || {}
 }
 
-const openGroupInvitationLinkScreen = async (htmlElement) => {
-    await selectChat(htmlElement)
-    await openGroupMenuOptions()
-    await openMenuDrawer()
-    await openInviteGroupViaLinkDrawer()
-    return true
+async function openGroupInvitationLinkScreen(htmlElement) {
+    try {
+        await selectChat(htmlElement)
+        await openGroupMenuOptions()
+        await openMenuDrawer()
+        await openInviteGroupViaLinkDrawer()
+    } catch (error) {
+        console.log(error)
+    }
 }
 
 const openInviteGroupViaLinkDrawer = async () =>
@@ -283,7 +176,7 @@ const openMenuDrawer = async () =>
 
         //confirm text on list
         isActive = document.querySelectorAll('div._3H4MS')[1].textContent === "Invite to group via link"
-        if (!isActive) throw new Error(`Menu Drawer not visible`)
+        if (!isActive) throw new Error(`Invite to group via link nao disponivel`)
         return isActive
     }, {
         minTimeout: 200,
@@ -312,14 +205,13 @@ const openGroupMenuOptions = async () =>
 
 const selectChat = async (chat) =>
     retry(async (bail, num) => {
+        console.log(chat, num)
         eventFire(chat.firstChild.firstChild.firstChild, 'mousedown');
         eventFire(chat.firstChild.firstChild, 'mousedown');
         let isActive = findReactComponent(chat).props.data.data.presence.chatActive
-        if (isActive) {
-            bail(true)
-            return true
-        } else
+        if (!isActive)
             throw new Error('We clicked and not activated')
+        return true
     }, {
         minTimeout: 200,
         maxTimeout: 400
@@ -365,31 +257,6 @@ function reachDate(msgs, desiredTimestamp) {
     return msgs.find(e => e.t < desiredTimestamp)
 }
 
-async function loadMessagesUntilCondition(condition, maxTimeoutSeconds = 10) {
-    if (typeof condition !== 'function')
-        return new Promise.reject('condition must be an function')
-
-    var timeout = 0;
-    let promise = new Promise((resolve, reject) => {
-        var interval = setInterval(() => {
-            if (condition()) {
-                clearInterval(interval);
-                clearTimeout(timeout);
-                scrollChatBottom();
-                resolve(true);
-            }
-            scrollChatTop();
-            //loadMoreMsgs();
-        }, 500);
-        timeout = setTimeout(() => {
-            clearInterval(interval);
-            scrollChatBottom();
-            reject(`reach ${maxTimeoutSeconds} seconds timeout!`);
-        }, maxTimeoutSeconds * 1000);
-    });
-    return promise;
-}
-
 const getOnFirebase = async (collection) =>
     retry(async (bail, num) => {
         var full_url_data_json = `${_firebase_base_url}${collection}.json`
@@ -422,3 +289,131 @@ function scrollChatBottom() {
 function rand(high, low = 0) {
     return Math.floor(Math.random() * (high - low + 1) + low);
 }
+
+
+//maybe every 1h?
+export async function getGroupsBasicData(groupKeysToRead = [], getLinks = false) {
+    let html = getHtmlElement('chatList')
+    let total = html.childNodes[0].childElementCount
+    let groupData = {}
+    let participants = {}
+    let messages = {}
+    for (let index = 0; index < total; index++) {
+        let htmlElement = html.childNodes[0].childNodes[index];
+        let reactComponent = findReactComponent(htmlElement);
+        let rawData = null
+
+        try {
+            rawData = reactComponent.props.data.data
+        } catch (error) {
+            console.log(error)
+            continue;
+        }
+        if (!rawData.isGroup) continue;
+
+        if (getLinks) {
+            await openGroupInvitationLinkScreen(htmlElement)
+        }
+
+        let groupMetadata = rawData.groupMetadata
+        let participantGroups = {}
+        participantGroups[rawData.id.user] = true
+        Object.keys(groupMetadata.participants._index).forEach(key => {
+            let participantObject = groupMetadata.participants._index[key]
+            let userId = participantObject.id.user
+            let name = participantObject.contact.name
+            let img = participantObject.contact.profilePicThumb ? participantObject.contact.profilePicThumb.img : undefined
+
+            let mergeGroups = participants[userId] ? participants[userId].groups : {}
+            participants[userId] = {
+                name,
+                img,
+                groups: {
+                    ...mergeGroups,
+                    ...participantGroups
+                }
+            }
+        })
+
+        let minTimestamp = undefined
+        let maxTimestamp = undefined
+        let lastMessageId = undefined
+        //we allow to read messages from this group
+        if (groupKeysToRead.length && groupKeysToRead.includes(rawData.id.user)) {
+            try {
+                await selectChat(htmlElement)
+                //dois dias atras
+                let diffdays = 2
+                let compareToDate = new Date(new Date().getTime() - (diffdays * 24 * 60 * 60 * 1000)).getTime() / 1000;
+                await loadMessagesUntilCondition(compareToDate)
+            } catch (error) {
+                console.log(error)
+            }
+
+            minTimestamp = Infinity
+            maxTimestamp = 0
+            for (let index = 0; index < rawData.msgs.models.length; index++) {
+                const msg = rawData.msgs.models[index];
+
+                minTimestamp = Math.min(minTimestamp, msg.t)
+                maxTimestamp = Math.max(maxTimestamp, msg.t)
+
+                //memoize
+                if (messages[msg.id.id]) continue
+
+                if (msg.type !== 'chat') continue
+                if (!msg.text) continue
+                if (msg.sender === undefined) continue
+
+                let tempText = removeDoubleSpaces(msg.text)
+                if (!passExtendedCleanRules(tempText)) continue
+                messages[msg.id.id] = {
+                    t: msg.t,
+                    senderId: msg.sender.user,
+                    text: msg.text
+                }
+            }
+            lastMessageId = rawData.msgs._last.id.id
+        }
+        groupData[rawData.id.user] = {
+            //htmlElement,
+            formattedTitle: rawData.formattedTitle,
+            desc: rawData.groupMetadata.desc,
+            groupInviteLink: rawData.groupMetadata.groupInviteLink,
+            owner: rawData.groupMetadata.owner.user,
+            restrict: rawData.groupMetadata.restrict,
+            lastMessageId,
+            minTimestamp,
+            maxTimestamp
+        }
+    }
+    return {
+        groups: groupData,
+        participants,
+        messages
+    }
+}
+
+const loadMessagesUntilCondition = async (compareDate) =>
+    retry(async (bail, num) => {
+        if (!compareDate)
+            bail(new Error(`invalid date to compare ${compareDate}`))
+
+        let chatMsgsHtml = document.querySelector('div._1ays2')
+        let chatMsgsReact = findReactComponent(chatMsgsHtml);
+        let msgs = chatMsgsReact.props.msgs || []
+        let reachDesiredDate = reachDate(msgs, compareDate)
+
+        if (!reachDesiredDate) {
+            let reachEncryptDate = reachEncryptionNotification(msgs)
+            if (!reachEncryptDate) {
+                scrollChatTop()
+                throw new Error(`Cannot load encrypt msg or date`)
+            }
+        }
+        return true
+    }, {
+        minTimeout: 500,
+        maxTimeout: 1000,
+        retries: 20
+    });

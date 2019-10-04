@@ -24,6 +24,7 @@ async function readMessages() {
      * not update target groups
      * set source type on source groups
      */
+    console.log(browserGroups)
     let browserGroupsKeys = Object.keys(browserGroups)
     for (let index = 0; index < browserGroupsKeys.length; index++) {
         const key = browserGroupsKeys[index];
@@ -32,6 +33,7 @@ async function readMessages() {
         else if (sourceGroupKeys.includes(key))
             browserGroups[key].type = AllGroups[key].type
     }
+    console.log(browserGroups)
     saveParticipantsList(browserParticipants)
     saveWhatsAppGroups(browserGroups)
     saveMessages(browserMessages)
@@ -63,6 +65,7 @@ async function sendMessages() {
         else if (targetGroupKeys.includes(key))
             browserGroups[key].type = AllGroups[key].type
     }
+    console.log(browserGroups)
     saveWhatsAppGroups(browserGroups)
 }
 
