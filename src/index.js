@@ -46,7 +46,7 @@ async function readMessages() {
     let AllGroups = await retrieveWhatsAppsGroups() || {}
     let sourceGroupKeys = Object.keys(AllGroups).filter(key => AllGroups[key] && AllGroups[key].type === 'source') || []
     let ignoreGroupKeys = Object.keys(AllGroups).filter(key => AllGroups[key] && AllGroups[key].type === 'target') || []
-     
+
     let browserData = await getGroupsBasicData(AllGroups)
     console.log({
         sourceGroupKeys
