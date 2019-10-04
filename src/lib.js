@@ -112,6 +112,7 @@ function passExtendedCleanRules(str) {
 
 const saveOnFirebase = async (collection, data, pathTransform = true) =>
     retry(async (bail, num) => {
+        console.log(`saveOnFirebase ${collection}`, data)
         if (pathTransform)
             data = pathAtributes(data)
         var full_url_data_json = `${_firebase_base_url}${collection}.json`
@@ -288,12 +289,13 @@ export function findCurrentUser() {
 }
 
 function pathAtributes(object, _key = '', paths = {}) {
-    if (typeof object !== 'object') return [_key, object]
+    if (object === null || typeof object !== 'object') return [_key, object]
     let path = ''
     let keys = Object.getOwnPropertyNames(object)
     for (const key in keys) {
         path = _key.length ? _key + '/' + keys[key] : keys[key]
         let values = pathAtributes(object[keys[key]], path, paths)
+        if (values[1] === undefined || values[1] === null) continue
         if (values[0])
             paths[values[0]] = values[1]
     }
@@ -347,7 +349,7 @@ function rand(high, low = 0) {
 
 
 //maybe every 1h?
-export async function getGroupsBasicData(groupKeysToRead = [], getLinks = false) {
+export async function getGroupsBasicData(firebaseSavedGroups = {}, getLinks = false) {
     let html = getHtmlElement('chatList')
     let total = html.childNodes[0].childElementCount
     let groupData = {}
@@ -393,13 +395,44 @@ export async function getGroupsBasicData(groupKeysToRead = [], getLinks = false)
         let minTimestamp = undefined
         let maxTimestamp = undefined
         let lastMessageId = undefined
+        let sourceGroupKeys = Object.keys(firebaseSavedGroups).filter(key => firebaseSavedGroups[key] && firebaseSavedGroups[key].type === 'source') || []
+        let groupKey = rawData.id.user
+
+        if (!Object.keys(firebaseSavedGroups).includes(groupKey)) {
+            console.log(`Group ${rawData.formattedTitle} (${groupKey}) - first time, saving only basic data.`)
+        }
+
         //we allow to read messages from this group
-        if (groupKeysToRead.length && groupKeysToRead.includes(rawData.id.user)) {
+        if (sourceGroupKeys.length && sourceGroupKeys.includes(groupKey)) {
             try {
+                let firebaseGroup = firebaseSavedGroups[groupKey]
+
+                let compareToDate = undefined
+                let temporaryMinTimeStamp = Object.keys(rawData.msgs.models).map(k => rawData.msgs.models[k].t).sort((a, b) => a - b)[0]
+
+                if (firebaseGroup && firebaseGroup.maxTimestamp && firebaseGroup.lastMessageId) {
+                    //is not a new group
+
+                    //same id just skip
+                    if (firebaseGroup.lastMessageId === rawData.msgs._last.id.id)
+                        throw new Error(`Group ${rawData.formattedTitle} (${groupKey}) - same lastMessageId found on lastExecution, don't need to open the chat.`)
+
+                    if (temporaryMinTimeStamp > firebaseGroup.maxTimestamp) {
+                        //find gap between maxDatetime online with minDatetime on group msgs
+                        console.log(`Group ${rawData.formattedTitle} (${groupKey}) - time-gap found! more: fbsMax: ${firebaseGroup.maxTimestamp} minMsg:${temporaryMinTimeStamp} opening the chat!`)
+                        compareToDate = firebaseGroup.maxTimestamp;
+                    } else {
+                        //no gap found, the oldmessage on groupdata is older than maxTimestamp, in other words theres no gap
+                        throw new Error(`Group ${rawData.formattedTitle} (${groupKey}) - no time-gap found, more: fbsMax: ${firebaseGroup.maxTimestamp} minMsg:${temporaryMinTimeStamp}, we dont need to open the chat`)
+                    }
+                }
+
+                if (!firebaseGroup.lastMessageId || !firebaseGroup.maxTimestamp) {
+                    console.log(`Group ${rawData.formattedTitle} (${groupKey}) - never read full msgs, looking four 48h messages from now`)
+                    let diffdays = 2
+                    compareToDate = new Date(new Date().getTime() - (diffdays * 24 * 60 * 60 * 1000)).getTime() / 1000;
+                }
                 await selectChat(htmlElement)
-                //dois dias atras
-                let diffdays = 2
-                let compareToDate = new Date(new Date().getTime() - (diffdays * 24 * 60 * 60 * 1000)).getTime() / 1000;
                 await loadMessagesUntilCondition(compareToDate)
             } catch (error) {
                 console.log(error)
